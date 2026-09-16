@@ -1,0 +1,559 @@
+捤獥汤捯湰灧
+농촌진흥청 농사로 – Open API 매뉴얼
+(신)작목별 농업기술정보 서비스
+桤灧
+漠杳
+慤桥桤灧漠杳
+OPEN API 이용 안내
+1. 개요
+농촌진흥청 농사로 OpenAPI는 다양한 농업기술정보를 유용하게 활용할 수 있도록 공개한 개발자 인터페이스입니다.
+2. 이용안내
+농촌진흥청 농사로 OpenAPI를 이용하기 위해서는 로그인 한 후 별도의 신청이 필요합니다. 농사로의 [汫╨Open API 이용안내汫h] 페이지에서 Open API 서비스 신청 및 매뉴얼 및 샘플 파일을 다운로드 받을 수 있습니다. 
+3. 제공 API서비스
+3.1 Open API 제공 방식
+농사로 Open API는 XML포맷을 사용한 REST방식과 동적 JavaScript 로딩을 이용한 AJAX 방식을 제공합니다.
+3.2 텍스트 인코딩
+농사로 Open API는 모든 텍스트 데이터를 U湯湷TF-8로 제공합니다.
+3.3 REST 방식의 XML 포맷 구조(목록 형식)
+氠瑢
+1Level
+2Level
+3Level
+4Level
+5Level
+설명
+response
+root Tag
+header
+header Tag
+resultCode
+결과 코드
+resultMsg
+결과 메시지
+requestParameter
+검색조건 등의 요청 파라미터를 하위로 제공
+...
+body
+body Tag
+items
+item
+서비스 항목을 item 하위로 제공
+...
+numOfRows
+페이지 당 제공하는 건수 
+(페이징 처리 시 제공, 기본값 : 10)
+pageNo
+페이지 번호
+(페이징 처리 시 제공, 기본값 : 1)
+totalCount
+총 건수
+(페이징 처리 시 제공)
+3.3 REST 방식의 XML 포맷 구조(단건 형식)
+氠瑢
+1Level
+2Level
+3Level
+4Level
+설명
+response
+root Tag
+header
+header Tag
+resultCode
+결과 코드
+resultMsg
+결과 메시지
+requestParameter
+검색조건 등의 요청 파라미터를 하위로 제공
+...
+body
+body Tag
+item
+서비스 항목은 item 하위로 제공
+...
+4. API 레퍼런스
+4.1 작목별 농업기술정보 서비스
+● 서비스 명 : cropEbook
+● 제공방식 : AJAX
+● 제공 오퍼레이션
+氠瑢
+오퍼레이션
+설명
+목록
+페이징
+mainCategoryList
+카테고리 조회 - 대분류
+○
+middleCategoryList
+카테고리 조회 - 중분류
+○
+subCategoryList
+카테고리 조회 - 소분류
+○
+mainTechList
+작목기술정보 분류
+○
+ebookList
+농업기술길잡이 목록조회
+○
+videoList
+동영상 목록조회
+○
+○
+varietyList
+품종정보 목록조회
+○
+○
+cropIndexList
+농업기술길잡이 목차조회
+○
+cropRequestList
+농업기술길잡이 개정정보 조회
+○
+4.2 오퍼레이션 설명
+4.2.1 mainCategoryList(카테고리 조회 – 대분류)
+● 요청 URL : http://api.nongsaro.go.kr/service/cropEbook/mainCategoryList
+● 요청 변수(Request Parameters)
+氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+insttName
+기관명
+● 응답 결과(Response Element)
+氠瑢
+응답변수
+설명
+mainCategoryCode
+대분류 카테고리 코드
+mainCategoryNm
+대분류 카테고리 명
+ 
+4.2.2 middleCategoryList(카테고리 조회 – 중분류)
+● 요청 URL :  http://api.nongsaro.go.kr/service/cropEbook/middleCategoryList
+● 요청 변수(Request Parameters)
+氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+mainCategoryCode
+대분류 카테고리 코드
+○
+● 응답 결과(Response Element)
+氠瑢
+응답변수
+설명
+middleCategoryCode
+중분류 카테고리 코드
+middleCategoryNm
+중분류 카테고리 명
+4.2.3 subCategoryList(카테고리 조회 – 소분류)
+● 요청 URL :  http://api.nongsaro.go.kr/service/cropEbook/subCategoryList
+● 요청 변수(Request Parameters)
+氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+middleCategoryCode
+중분류 카테고리 코드
+○
+subCategoryNm
+작목명
+● 응답 결과(Response Element)
+氠瑢
+응답변수
+설명
+subCategoryCode
+소분류 카테고리 코드
+subCategoryNm
+소분류 카테고리 명
+4.2.4 mainTechList(작목기술정보 분류)
+● 요청 URL :  http://api.nongsaro.go.kr/service/cropEbook/mainTechList
+● 요청 변수(Request Parameters)
+氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+subCategoryCode
+소분류 카테고리 코드
+○
+● 응답 결과(Response Element)
+氠瑢
+응답변수
+설명
+mainTechCode
+작목기술정보 분류코드
+mainTechNm
+작목기술정보 분류코드명
+  
+4.2.5 ebookList(농업기술길잡이 목록조회)
+● 요청 URL :  http://api.nongsaro.go.kr/service/cropEbook/ebookList
+● 요청 변수(Request Parameters)
+氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+subCategoryCode
+소분류 카테고리 코드
+○
+● 응답 결과(Response Element)
+氠瑢
+응답항목
+설명
+atchmnflGroupEsntlEbookCode
+농업기술길잡이 썸네일 이미지 코드
+atchmnflGroupEsntlEbookNm
+농업기술길잡이 썸네일 이미지 이름
+cropsEbookFile
+농업기술길잡이 원본 파일 다운로드
+cropsEbookFileNo
+농업기술길잡이 파일코드
+orginlFileNm
+농업기술길잡이 파일명
+ebookCode
+농업기술길잡이 코드
+ebookName
+농업기술길잡이 명
+stdItemCd
+품목코드
+stdItemNm
+품목명
+ 
+4.2.6 videoList(동영상 목록조회)
+● 요청 URL :  http://api.nongsaro.go.kr/service/cropEbook/videoList
+● 요청 변수(Request Parameters)
+氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+subCategoryCode
+소분류 카테고리 코드
+○
+subject
+제목
+pageNo
+조회할 페이지 번호
+numOfRows
+한 페이지에 제공할 건수
+● 응답 결과(Response Element)
+氠瑢
+응답항목
+설명
+videoTitle
+동영상 제목
+videoOriginInstt
+동영상 출처
+videoLink
+비디오 링크
+videoImg
+비디오 썸네일 이미지 링크
+ 
+4.2.7 varietyList(품종정보 목록조회)
+● 요청 URL :  http://api.nongsaro.go.kr/service/cropEbook/varietyList
+● 요청 변수(Request Parameters)
+氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+subCategoryCode
+소분류 카테고리 코드
+○
+subject
+제목
+pageNo
+조회할 페이지 번호
+numOfRows
+한 페이지에 제공할 건수
+● 응답 결과(Response Element)
+氠瑢
+응답항목
+설명
+cropNm
+작물명
+unbrngYear
+육성년도
+unbrngInsttInfo
+육성기관
+varietyNm
+품종명
+mainChartrInfo
+주요특성
+atchFileLink
+첨부파일 링크
+atchFileNm
+첨부파일명
+imgFileLink
+썸네일 이미지
+4.2.8 cropIndexList(농업기술길잡이 목차조회)
+● 요청 URL :  http://api.nongsaro.go.kr/service/cropEbook/cropIndexList
+● 요청 변수(Request Parameters)
+ 氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+ebookCode
+농업기술길잡이 코드
+○
+cropsEbookFileNo
+농업기술길잡이 파일코드
+○
+● 응답 결과(Response Element)
+氠瑢
+응답항목
+설명
+ebookCode
+농업기술길잡이 코드
+cropsEbookFileNo
+농업기술길잡이 파일코드
+cropsEbookIndexNo
+목차코드
+ebookUrl
+농업기술길잡이 EBOOK 링크
+ebookMobileUrl
+농업기술길잡이 EBOOK 모바일 링크
+indexBasePage
+목차 기본페이지
+indexPage
+목차 실제페이지
+indexLevel
+목차레벨
+indexName
+목차명
+indexOrder
+목차순서
+indexSid
+목차시퀀스
+stdItemCd
+품목코드
+stdItemNm
+품목명
+4.2.9 cropRequestList(농업기술길잡이 개정정보 조회)
+● 요청 URL :  http://api.nongsaro.go.kr/service/cropEbook/cropRequestList
+● 요청 변수(Request Parameters)
+氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+ebookCode
+농업기술길잡이 코드
+○
+cropsEbookFileNo
+농업기술길잡이 파일코드
+○
+stdItemCd
+품목코드
+○
+● 응답 결과(Response Element)
+氠瑢
+응답항목
+설명
+cropsEbookRequestNo
+개정정보 코드
+indexName
+목차명
+indexPage
+목차 실제페이지
+requestFileView
+개정정보 파일뷰어 링크
+writeDate
+등록일
+writeUserNm
+등록자
+5. 오퍼레이션간 연관 관계
+5.1 농업기술길잡이 목록조회의 경우
+漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳
+1. 작목명 조회
+2. 대분류 카테고리조회
+3. 중분류 카테고리조회
+4. 소분류 카테고리조회
+5. 작목기술정보 분류
+6. 길잡이 정보 조회
+7. 길잡이 목차 정보& 최근 변경된 정보
+漠杳漠杳
+5.2 동영상 목록조회의 경우
+漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳
+1. 작목명 조회
+2. 대분류 카테고리조회
+4. 소분류 카테고리조회
+5. 작목기술정보 분류 - 동영상
+6. 동영상 목록조회
+漠杳漠杳
+3. 중분류 카테고리조회
+5.3 품종정보 목록조회의 경우
+漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳漠杳
+1. 작목명 조회
+2. 대분류 카테고리조회
+3. 중분류 카테고리조회
+4. 소분류 카테고리조회
+6. 품종 목록조회
+5. 작목기술정보 분류 - 품종
+漠杳漠杳
+6. Open API 결과코드
+氠瑢
+결과코드
+설명
+00
+정상적으로 처리된 경우
+(검색조건이 잘못되어 조회데이터가 없는 경우도 해당됩니다)
+11
+인증키를 입력하지 않았거나 발급받은 인증키를 사용하지 않은 경우
+12
+발급받은 인증키를 사용하였으나 농사로 관리자에 의해 일시 중지된 경우
+(농사로 시스템 관리자에게 문의하기 바랍니다)
+13
+농사로에서 제공하는 서비스 및 오퍼레이션이 아닌 경우
+15
+AJAX 방식의 경우 Open API 신청 시 입력한 서비스 도메인에서 호출하지 않은 경우
+91
+농사로 Open API 시스템의 오류가 발생한 경우
+(계속 반복되면 농사로 시스템 관리자에게 문의하기 바랍니다)
+7. Ajax 방식 샘플 소스 적용
+氠瑢
+<link href="http://api.nongsaro.go.kr/css/api.css" rel="stylesheet" type="text/css">
+<script type="text/javascript" src="http://api.nongsaro.go.kr/js/framework.js"></script>	èĀ	
+<script type="text/javascript" src="http://api.nongsaro.go.kr/js/openapi_nongsaro.js"></script>
+	ྠĀ	
+<script type="text/javascript">
+nongsaroOpenApiRequest.apiKey = "발급받은인증키";//변경할 부분 1
+nongsaroOpenApiRequest.serviceName = "cropEbook";
+nongsaroOpenApiRequest.operationName = "mainCategoryList";
+nongsaroOpenApiRequest.htmlArea="nongsaroApiLoadingArea";
+nongsaroOpenApiRequest.callback = "http://yourDomain/ajax_local_callback.jsp";//변경할 부분 2
+</script>
+</head>
+<body>
+<div id="nongsaroApiLoadingArea"></div><!-- 메인카테고리 HTML 로딩 영역 -->
+<div id="nongsaroApiLoadingArea1"></div><!-- 중분류카테고리 HTML 로딩 영역 -->
+<div id="nongsaroApiLoadingArea2"></div><!-- 소분류 카테고리 HTML 로딩 영역 -->
+<div id="nongsaroApiLoadingArea3"></div><!-- 작목기술정보 분류 HTML 로딩 영역 -->
+<div id="nongsaroApiLoadingArea4"></div><!-- 농업기술길잡이 E-BOOK HTML 로딩 영역 -->
+<div id="nongsaroApiLoadingArea5"></div><!-- 농업기술길잡이 목차정보 HTML 로딩 영역-->
+<div id="nongsaroApiLoadingArea6"></div><!-- 농업기술길잡이 개정자료 HTML 로딩 영역 -->
+제공되는 샘플소스를 편집기로 열어보면 위와 같은 형태의 코딩이 되어 있습니다.
+제공되는 샘플소스를 서비스할 소스에 삽입하고 아래와 같이 변경하면 됩니다.
+변경할 부분 1은 농사로에서 발급받은 인증키를 소스에 기입하면 됩니다.
+변경할 부분 2는 샘플소스와 같이 제공되는 각 언어별 콜백페이지를 서버에 업로드 후
+해당 url을 기술하면 됩니다.
+ 
+각 서비스 별로 샘플소스가 약간의 차이가 있으니 다른 서비스의 샘플소스를 사용하지 마십시오.
+8. 기존 농촌진흥청 홈페이지 API 변환
+기존 농촌진흥청 홈페이지에서 서비스 하고 있던 Open API중 아래의 서비스는 농사로에 이전되어 서비스하고 있습니다.
+氠瑢
+순번
+서비스명
+기존 서비스 코드
+변경된 서비스명
+1
+작목별 농업기술정보
+105010000000
+cropTechInfo
+2
+주간농사정보
+105020000000
+weekFarmInfo
+3
+품목별 관리매뉴얼(품종정보)
+105050000000
+farmWorkingPlan
+4
+농업기술 동영상
+105060000000
+agriTechVideo
+5
+농축산물소득정보
+105070000000
+farmPrdtIncome
+6
+품종정보
+105080000000
+varietyInfo
+7
+RDA 인테러뱅
+105090000000
+rdaInterrobang
+8.1 발급 인증키
+기존 농촌진흥청 홈페이지로 신청하여 발급받은 인증키는 농사로에서 그대로 사용할 수 있습니다. 만약 농촌진흥청 홈페이지로 신청하여 발급받은 인증키를 사용하였음에도 결과코드 11이 발생한 경우에는 올바른 회원ID로 신청하지 않은 경우이므로 농사로에서 재신청하여야 합니다.
+8.2 REST방식의 Open API를 변경할 경우
+4항의 API 레퍼런스를 참조하여 재 구축을 하여야 합니다.
+8.3 AJAX방식의 Open API를 변경할 경우
+변경 전 소스는 아래와 같습니다.
+氠瑢
+<script type="text/javascript" src="http://www.rda.go.kr/js/framework.js"></script>
+<script type="text/javascript" src="http://www.rda.go.kr/js/rda.common.js"></script>
+<script type="text/javascript" src="skl_wkfarminfo.js"></script>
+<script type="text/javascript" src="http://www.rda.go.kr/tec/skl/skl_wkfarminfo.js"></script> 
+<link rel="stylesheet" type="text/css" href="/site/common/css/api.css">
+<script type="text/javascript"> 
+	ྠĀ	var oRequestParameter={};
+	ྠĀ	oRequestParameter.sys="105010000000"; 
+	ྠĀ	oRequestParameter.key="발급받은인증키";	ॠĀ	
+	ྠĀ	oRequestParameter.loginId="농촌진흥청통합ID";	๨Ā	
+	ྠĀ	oRequestParameter.ajxCappPage = "/common/api/ajaxCall.jsp";
+	ྠĀ	oRequestParameter.reqMetaNo  ="";	фĀ	
+	ྠĀ	rda.sklinfo = {
+	ྠĀ	  initialize : function() {
+	ྠĀ	  var comSklinfoInit = $Fn(rda.ComSklWkfarm.initialize, rda.ComSklWkfarm).bind();
+	ྠĀ	  comSklinfoInit();
+	ྠĀ	  },
+	ྠĀ	  destroy : function() {
+	ྠĀ	  	ఠĀ	
+	ྠĀ	  }
+	ྠĀ	
+	ྠĀ	$Fn(rda.sklinfo.initialize, rda.sklinfo).attach(window, "load");
+	ྠĀ	$Fn(rda.sklinfo.destroy, rda.sklinfo).attach(window, "unload");
+</script>
+새롭게 개편된 농사로 Open API Ajax 방식의 소스는 아래와 같습니다.
+氠瑢
+<link href="http://api.nongsaro.go.kr/css/api.css" rel="stylesheet" type="text/css">
+<script type="text/javascript" src="http://api.nongsaro.go.kr/js/framework.js"></script>	èĀ	
+<script type="text/javascript" src="http://api.nongsaro.go.kr/js/openapi_nongsaro.js"></script>
+	ྠĀ	
+<script type="text/javascript">
+nongsaroOpenApiRequest.apiKey = "발급받은인증키";//변경할 부분 1
+nongsaroOpenApiRequest.serviceName = "cropEbook";
+nongsaroOpenApiRequest.operationName = "mainCategoryList";
+nongsaroOpenApiRequest.htmlArea="nongsaroApiLoadingArea";
+nongsaroOpenApiRequest.callback = "http://yourDomain/ajax_local_callback.jsp";//변경할 부분 2
+</script>
+</head>
+<body>
+<div id="nongsaroApiLoadingArea"></div><!-- 메인카테고리 HTML 로딩 영역 -->
+<div id="nongsaroApiLoadingArea1"></div><!-- 중분류카테고리 HTML 로딩 영역 -->
+<div id="nongsaroApiLoadingArea2"></div><!-- 소분류 카테고리 HTML 로딩 영역 -->
+<div id="nongsaroApiLoadingArea3"></div><!-- 작목기술정보 분류 HTML 로딩 영역 -->
+<div id="nongsaroApiLoadingArea4"></div><!-- 농업기술길잡이 E-BOOK HTML 로딩 영역 -->
+<div id="nongsaroApiLoadingArea5"></div><!-- 농업기술길잡이 목차정보 HTML 로딩 영역-->
+<div id="nongsaroApiLoadingArea6"></div><!-- 농업기술길잡이 개정자료 HTML 로딩 영역 -->
+상단 표를 참고하시어 기존 소스의 oRequestParameter.sys 코드에 해당하는 서비스명을 nongsaroOpenApiRequest.serviceName 에 기입하고, 콜백페이지 역시 농사로에서 제공하는 콜백페이지로 변경하시면 됩니다.
+9. 기타사항
+9.1 ajax 방식 사용 시 한글 깨짐 현상이 발생하는 경우
+제공되는 콜백페이지의 문자셋 설정을 변경하여 적용하십시오.
+9.2 농사로 open API 서버와 통신이 원활하지 않은 경우
+서버 방화벽에서 농사로 오픈API 서버와 80 포트 통신이 막혀있는지 확인하십시오.

@@ -1,0 +1,159 @@
+捤獥汤捯湰灧
+농촌진흥청 농사로 – Open API 매뉴얼
+농작물 재해예방정보 서비스
+桤灧
+漠杳
+慤桥桤灧漠杳
+OPEN API 이용 안내
+1. 개요
+농촌진흥청 농사로 OpenAPI는 다양한 농업기술정보를 유용하게 활용할 수 있도록 공개한 개발자 인터페이스입니다.
+2. 이용안내
+농촌진흥청 농사로 OpenAPI를 이용하기 위해서는 로그인 한 후 별도의 신청이 필요합니다. 농사로의 [汫╨Open API 이용안내汫h] 페이지에서 Open API 서비스 신청 및 매뉴얼 및 샘플 파일을 다운로드 받을 수 있습니다. 
+3. 제공 API서비스
+3.1 Open API 제공 방식
+농사로 Open API는 동적 JavaScript 로딩을 이용한 AJAX 방식을 제공합니다.
+3.2 텍스트 인코딩
+농사로 Open API는 모든 텍스트 데이터를 U湯湷TF-8로 제공합니다.
+4. API 레퍼런스
+4.1 농작물재해예방정보 서비스
+● 서비스 명 : frcDsstrPrevnt
+● 제공방식 : AJAX
+● 제공 오퍼레이션
+氠瑢
+오퍼레이션
+설명
+목록
+페이징
+frcDsstrPrevntYear
+검색년도 목록
+○
+frcDsstrPrevntLst
+농작물재해예방정보 목록
+○
+○
+4.2 오퍼레이션 설명
+4.2.1 frcDsstrPrevntYear(검색년도 목록)
+● 요청 URL : http://api.nongsaro.go.kr/service/frcDsstrPrevnt/frcDsstrPrevntYear
+● 요청 변수(Request Parameters)
+氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+sType
+검색구분
+sText
+검색어
+● 응답 결과(Response Element)
+氠瑢
+응답변수
+설명
+yearCode
+년도코드
+4.2.2 frcDsstrPrevntLst(농작물재해예방정보 목록)
+● 요청 URL : http://api.nongsaro.go.kr/service/frcDsstrPrevnt/frcDsstrPrevntLst
+● 요청 변수(Request Parameters)
+氠瑢
+요청변수
+설명
+필수 여부
+apiKey
+발급받은 Open API 인증키
+○
+sYear
+년도
+sText
+검색어
+sType
+검색구분
+pageNo
+조회할 페이지 번호
+numOfRows
+한 페이지에 제공할 건수
+● 응답 결과(Response Element)
+氠瑢
+응답변수
+설명
+cntntsNo
+콘텐츠 번호(키)
+cntntsSj
+제목
+cntntsRdcnt
+조회수
+rtnFileSeCode
+파일구분코드
+rtnFileSn
+파일순번
+rtnOrginlFileNm
+원본 파일명
+rtnStreFileNm
+저장 파일명
+rtnFileCours
+파일경로
+rtnImageDc
+이미지설명
+rtnThumbFileNm
+썸네일파일명
+svcDtx
+등록 일시 (YYYY-MM-DD)
+svcDt
+등록 일시 (DATE)
+noticeAt
+공지 여부
+updusrEsntlNm
+작성자명
+5. 오퍼레이션간 연관 관계
+漠杳漠杳漠杳5.1 농작물재해예방정보 목록漠杳
+1. 검색조건 선택 및 조회
+2. 뷰어로 보거나 다운로드 가능
+漠杳漠杳
+6. Open API 결과코드
+氠瑢
+결과코드
+설명
+00
+정상적으로 처리된 경우
+(검색조건이 잘못되어 조회데이터가 없는 경우도 해당됩니다)
+11
+인증키를 입력하지 않았거나 발급받은 인증키를 사용하지 않은 경우
+12
+발급받은 인증키를 사용하였으나 농사로 관리자에 의해 일시 중지된 경우
+(농사로 시스템 관리자에게 문의하기 바랍니다)
+13
+농사로에서 제공하는 서비스 및 오퍼레이션이 아닌 경우
+15
+AJAX 방식의 경우 Open API 신청 시 입력한 서비스 도메인에서 호출하지 않은 경우
+91
+농사로 Open API 시스템의 오류가 발생한 경우
+(계속 반복되면 농사로 시스템 관리자에게 문의하기 바랍니다)
+7. Ajax 방식 샘플 소스 적용
+氠瑢
+<link href="http://api.nongsaro.go.kr/css/api.css" rel="stylesheet" type="text/css">
+<script type="text/javascript" src="http://api.nongsaro.go.kr/js/framework.js"></script>	èĀ	
+<script type="text/javascript" src="http://api.nongsaro.go.kr/js/openapi_nongsaro.js"></script>
+	ྠĀ	
+<script type="text/javascript">
+nongsaroOpenApiRequest.apiKey = "발급받은인증키";//변경할 부분 1
+nongsaroOpenApiRequest.serviceName = "frcDsstrPrevnt";
+nongsaroOpenApiRequest.operationName = "frcDsstrPrevntYear";
+nongsaroOpenApiRequest.htmlArea="nongsaroApiLoadingArea";
+nongsaroOpenApiRequest.callback = "http://yourDomain/ajax_local_callback.jsp";//변경할 부분 2
+</script>
+</head>
+<body>
+<div id="nongsaroApiLoadingArea"></div>
+<div id="nongsaroApiLoadingAreaResult"></div>
+제공되는 샘플소스를 편집기로 열어보면 위와 같은 형태의 코딩이 되어 있습니다.
+제공되는 샘플소스를 서비스할 소스에 삽입하고 아래와 같이 변경하면 됩니다.
+변경할 부분 1은 농사로에서 발급받은 인증키를 소스에 기입하면 됩니다.
+변경할 부분 2는 샘플소스와 같이 제공되는 각 언어별 콜백페이지를 서버에 업로드 후
+해당 url을 기술하면 됩니다.
+ 
+각 서비스 별로 샘플소스가 약간의 차이가 있으니 다른 서비스의 샘플소스를 사용하지 마십시오.
+8. 기타사항
+8.1 ajax 방식 사용 시 한글 깨짐 현상이 발생하는 경우
+제공되는 콜백페이지의 문자셋 설정을 변경하여 적용하십시오.
+8.2 농사로 open API 서버와 통신이 원활하지 않은 경우
+서버 방화벽에서 농사로 오픈API 서버와 80 포트 통신이 막혀있는지 확인하십시오.
