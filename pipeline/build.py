@@ -15,6 +15,11 @@
 #   (app/models/farm/crop.py), gdd.ts 의 dailyGdd 가 이 값을 받아 Modified 로 간다.
 #   값이 없으면 전부 Standard 로 돌아 폭염일이 15% 부풀려진다.
 #
+#   `sow_method` · `sow_from` · `sow_to` 도 2026-09-16 에 넣었다. §A 의 파종일은
+#   지금까지 GDD 역산의 **입력**으로만 쓰이고 버려졌다 — 그래서 "상추 언제 심어?"
+#   에 서비스가 "자료에 없습니다" 라고 답했다. 계산 재료를 남기는 칸이다.
+
+#
 # ⚠ **GDD 세 칸은 비운다.** gdd_target · gdd_from · gdd_to 는 일별 기온 역산이
 #   있어야 나온다(확정표 §C — 11작물은 목표값 자체가 없고, 벼·수박은 ② 단위라
 #   ③ 으로 환산해야 한다). 지어내지 않는다. verify.py 가 "아직 못 넘긴다" 고 찍는다.
@@ -41,7 +46,8 @@ OUT = HERE / "out"
 # ─────────────────────────────────────────────────────────────────────
 계약 = {
     "crops.csv": ["name", "base_temp", "upper_temp", "difficulty"],
-    "crop_variants.csv": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest"],
+    "crop_variants.csv": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest",
+                          "sow_method", "sow_from", "sow_to"],
     "crop_stages.csv": ["crop_name", "maturity_type", "stage_order", "stage_name",
                         "gdd_from", "gdd_to", "water_need_mm", "fertilize_needed",
                         "guide_text"],
@@ -204,6 +210,13 @@ def crop_variants(온도표, 작형표, 접기, 수박표, 분할작물, 품종�
         기본 = 대표.get(작물)
         일수 = int(기본["일수"]) if 기본 and 기본["일수"] else ""
         작형이름 = (기본 or {}).get("작형", "")
+        # 파종 창은 days_to_harvest 와 **같은 대표 작형**에서 나온다.
+        # 다른 작형에서 가져오면 "봄에 심어 가을 일수만큼 키운다" 가 된다
+        창 = {
+            "sow_method": (기본 or {}).get("파종방법", ""),
+            "sow_from": (기본 or {}).get("파종시작", ""),
+            "sow_to": (기본 or {}).get("파종끝", ""),
+        }
 
         # ① 수박 — 품종정보가 아니라 농작업일정 표에서 나온다 (확정표 §D-3)
         if 작물 == "수박":
@@ -222,6 +235,7 @@ def crop_variants(온도표, 작형표, 접기, 수박표, 분할작물, 품종�
                 묶음.setdefault(코드, []).append(r)
             for 코드, 것들 in 묶음.items():
                 행들.append({
+                    **창,
                     "crop_name": 작물, "maturity_type": 코드,
                     "gdd_target": "",          # ⚠ §D-3 값은 ② 단위다. 역산 전까지 비운다
                     # ⚠ §D-3 의 일수는 **착과 후** 일수다. ORM 의 days_to_harvest 는
@@ -240,6 +254,7 @@ def crop_variants(온도표, 작형표, 접기, 수박표, 분할작물, 품종�
             for 코드 in ("EARLY", "MID", "LATE"):
                 칸 = 갈래.get(코드)
                 행들.append({
+                    **창,
                     "crop_name": 작물, "maturity_type": 코드,
                     "gdd_target": "", "days_to_harvest": 일수,
                     "숙기원문": " · ".join(sorted(칸["원문"])) if 칸 else "",
@@ -251,6 +266,7 @@ def crop_variants(온도표, 작형표, 접기, 수박표, 분할작물, 품종�
 
         # ③ 나머지 — MID 한 행 (확정표 §D-2)
         행들.append({
+            **창,
             "crop_name": 작물, "maturity_type": "MID",
             "gdd_target": "", "days_to_harvest": 일수,
             "숙기원문": "", "품종수": "", "작형": 작형이름,

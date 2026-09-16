@@ -8,6 +8,7 @@
 #
 # ⚠ 한 원본에서만 쓰는 것은 그 원본 파일에 두세요. 여기가 다시 비대해집니다.
 
+import calendar
 import csv
 import re
 from collections import Counter
@@ -268,6 +269,39 @@ def middle_day(month, era):
     mark = "+" if m > 12 else ""
     if m > 12:
         m -= 12
+    return f"{mark}{m:02d}-{day:02d}"
+
+
+# 순의 첫날. middle_day 는 중앙일 하나만 주는데, 사용자에게 보여줄 파종 창은
+# **양 끝**이 필요하다.
+# ⚠ 중앙일(5·15·25)을 끝으로 쓰면 안 된다 — '8.중~9.상' 이 08-15~09-05 가 되어
+#   실제로 심어도 되는 08-11 과 09-10 이 창 밖으로 밀려난다
+ERA_FIRST = {"상": 1, "중": 11, "하": 21}
+
+
+def era_edge(month, era, last=False):
+    """순의 첫날. last=True 면 끝날. ('8','중') → '08-11' · last → '08-20'.
+
+    하순의 끝날은 그 달의 말일이다(2월 28 · 4월 30 · 8월 31).
+    윤년은 보지 않는다 — 추천 창이라 하루 차이가 판정을 바꾸지 않는다.
+    middle_day 와 같은 '+MM-DD'(이듬해) 표기를 쓴다.
+    """
+    first = ERA_FIRST.get(era)
+    try:
+        m = int(month)
+    except (TypeError, ValueError):
+        return ""
+    if not first or not 1 <= m <= 24:
+        return ""
+    mark = "+" if m > 12 else ""
+    if m > 12:
+        m -= 12
+    if not last:
+        day = first
+    elif era == "하":
+        day = calendar.monthrange(2001, m)[1]     # 2001 은 평년
+    else:
+        day = first + 9
     return f"{mark}{m:02d}-{day:02d}"
 
 
