@@ -26,7 +26,7 @@ from common import (  # noqa: E402
     COLS, NUM, OUT, RAW, TEMP_RANGE, temp_kind, clear_read_cache, dump_raw, month_fix, nospace,
     read_doc, rows_out, set_out, temp_from_sentence, tidy, to_num,
 )
-from crops import RAW_NAMES, registry_report  # noqa: E402
+from crops import RAW_NAMES, is_main, registry_report  # noqa: E402
 from sections import parse_sections  # noqa: E402
 
 
@@ -373,6 +373,43 @@ def attach_body(cmap):
     return temp, sumt
 
 
+def 동해규칙(온도행들):
+    """본문에서 캔 온도 중 **'얼어 죽는다'** 고 못 박은 것만 규칙으로 올린다.
+
+        ※ 10℃ 이하에서 생육정지, -1.7℃ 이하에서 동사
+                                  ↑ 이 절만 규칙이 된다
+
+    ⚠ **'동해' 갈래만 올린다.** `단계별저온` 이나 `상한후보?` 까지 규칙으로 바꾸면
+      뜻이 흐린 문장이 가짜 규칙이 된다. 실제로 이런 줄이 섞여 있다 —
+
+        "35℃이하 유지(35℃ 이상에서는 수정률 감소)"   ← 관리 지침이지 저온 규칙이 아니다
+        "10℃ 이하, 30℃ 이상"                      ← 무엇의 한계인지 줄에 안 적혀 있다
+
+      그래서 문지기를 `common.FROST_DEAD` 한 곳에 두고, 여기서는 그 판정만 믿는다.
+      넓히고 싶으면 그 정규식을 고칠 것 — 이 함수에 갈래를 더하지 말 것.
+
+    ⚠ 생육단계는 비운다. 본문 문장에는 단계가 안 적혀 있다.
+      없는 값은 비운다 — 작물 전체에 걸리는 규칙이 된다.
+    """
+    규칙 = []
+    for t in 온도행들:
+        if t.get("종류") != "동해":
+            continue
+        값 = t.get("값최소")
+        if 값 == "" or 값 is None:
+            continue
+        규칙.append({
+            "작물": t["작물"], "본선": is_main(t["작물"]),
+            "재해종류": "동해", "생육단계": "",
+            "지표": "최저기온", "부등호": "<=", "값": 값, "단위": "℃",
+            "지속일": "", "등급": "",
+            "조건원문": (t.get("원문") or "")[:120],
+            "출처": "재배법본문", "출처파일": t.get("출처파일", ""),
+            "위치": t.get("위치", ""),
+        })
+    return 규칙
+
+
 def run():
     """raw + 첨부 를 읽어 중간 CSV 여섯 종으로."""
     cmap = crop_map()
@@ -384,6 +421,9 @@ def run():
     tp1, sm1 = attach_body(cmap)
     temp += tp1          # 첨부 표 밖 서술 (감자 base_temp 5℃ 가 여기 있다)
     sumt += sm1
+    # 본문에 '동사' 로 적힌 것은 경보 규칙이다 (옥수수 -1.7℃).
+    # 한계온도표에 줄이 없는 작물은 이 길로만 규칙이 생긴다.
+    rule += 동해규칙(temp)
     return {
         "mid_schedule.csv": sched + s2,
         "mid_temp.csv": temp,

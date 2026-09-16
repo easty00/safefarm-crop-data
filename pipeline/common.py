@@ -340,7 +340,14 @@ UP_STOP = re.compile(r"(생육\S{0,2}\s*(정지|저하|불량|억제)|발아\s*�
 LOW_GO = re.compile(r"(자라기\s*시작|생육\s*시작|생장\s*시작|싹이?\s*트|자람)")
 
 
-LOW_STOP = re.compile(r"(생육\S{0,2}\s*(정지|불량|저하)|고사|얼어|동사)")
+LOW_STOP = re.compile(r"(생육\S{0,2}\s*(정지|불량|저하)|고사)")
+# ⚠ '고사' 는 남겨둔다. "잎·줄기가 고사된 다음 수확" 처럼 자연스러운 노화에도 쓴다.
+#   '동사'·'얼어죽' 은 얼어 죽는 것뿐이라 아래 FROST_DEAD 로 옮겼다.
+
+# 얼어 죽는다는 말. 생육정지(하한후보)가 아니라 **동해 경보**다.
+#   "※ 10℃ 이하에서 생육정지, -1.7℃ 이하에서 동사"
+#     앞 절은 base_temp 10, 뒷 절은 동해 -1.7 — 한 줄인데 뜻이 다르다
+FROST_DEAD = re.compile(r"(동사|얼어\s*죽|동결\s*피해)")
 
 # ⚠ '촉진' 은 base_temp 가 아니다.
 #     "18℃ 이상에서 잎 생육이 촉진"  = 그 위면 빨라진다
@@ -390,6 +397,22 @@ BARE_LOW = re.compile(r"(에서도\s*(발아|생육|자라)|정도\S{0,2}\s*(발
                       r"|부터\s*(발아|생육|자라)|넘으면\s*(발아|생육))")
 
 
+# 절을 가르는 부호. ⚠ **숫자 사이의 쉼표는 세지 않는다** — `1,100℃` 가 쪼개진다.
+절나눔 = re.compile(r"(?<!\d)\s*[,;·，；]\s*(?!\d)")
+
+
+def 절경계(line, s, e):
+    """[s,e) 를 품은 절의 앞뒤 끝을 돌려준다. 창이 이웃 절을 넘보지 못하게 막는 자다."""
+    lo, hi = 0, len(line)
+    for m in 절나눔.finditer(line):
+        if m.end() <= s:
+            lo = m.end()
+        elif m.start() >= e:
+            hi = m.start()
+            break
+    return lo, hi
+
+
 def temp_kind(around, has_ge, has_le, tail="", 앞=""):
     """온도 한 건의 '종류' 를 정한다. 사용법.md §2 참조.
 
@@ -426,6 +449,9 @@ def temp_kind(around, has_ge, has_le, tail="", 앞=""):
             return "하한후보"
         if HIGH_LABEL.search(앞):
             return "상한후보"
+    # ⚠ 얼어 죽는 것은 '저온' 이 아니라 '동해' 다. build 의 재해갈래가 둘을 다르게 받는다.
+    if has_le and FROST_DEAD.search(around):
+        return "동해"
     if has_le and DAMAGE.search(around):
         return "단계별저온"
     if has_ge and UP_STOP.search(around):
@@ -503,10 +529,14 @@ def temp_from_sentence(text, crop, src, loc, 작물자리=None):
                     "출처파일": src, "위치": loc,
                 })
                 continue
-            # 숫자 주변만 본다. 앞 25자 · 뒤 40자
-            around = line[max(0, m.start() - 25):m.end() + 40]
-            tail = line[m.end():m.end() + 40]
-            앞 = line[max(0, m.start() - 14):m.start()]      # 숫자 바로 앞. 항목 이름이 여기 있다
+            # 숫자 주변만 본다. 앞 25자 · 뒤 40자.
+            # ⚠ 단 **제 절(節) 밖으로는 안 넘어간다.** 한 줄에 뜻이 다른 절이 둘 있다.
+            #     "10℃ 이하에서 생육정지, -1.7℃ 이하에서 동사"
+            #   창이 쉼표를 넘으면 -1.7 이 앞 절의 '생육정지' 를 보고 하한후보가 된다.
+            c0, c1 = 절경계(line, m.start(), m.end())
+            around = line[max(c0, m.start() - 25):min(c1, m.end() + 40)]
+            tail = line[m.end():min(c1, m.end() + 40)]
+            앞 = line[max(c0, m.start() - 14):m.start()]      # 숫자 바로 앞. 항목 이름이 여기 있다
             # ⚠ 방향은 숫자 주변만 보고 정하지만, **문장이 통째로 딴 얘기인지**는
             #   문장 전체를 봐야 안다. 창이 좁아 '저장' 을 못 보고
             #   "벼 저장은 … 온도 15℃ 이하" 가 '벼 단계별저온 15℃' 가 된 적이 있다.
