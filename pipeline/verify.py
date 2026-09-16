@@ -31,13 +31,13 @@ sys.path.insert(0, str(HERE))
 # ─────────────────────────────────────────────────────────────────────
 
 칸 = {
-    "crops": ["name", "base_temp", "upper_temp", "difficulty"],
+    "crops": ["name", "base_temp", "upper_temp", "care_level", "difficulty"],
     "crop_variants": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest"],
     "crop_stages": ["crop_name", "maturity_type", "stage_order", "stage_name",
                     "gdd_from", "gdd_to", "water_need_mm", "fertilize_needed",
                     "guide_text"],
-    # ⚠ 아직 저쪽에 없는 표다. `pipeline/proposal_crop_disaster_rule.py` 를 넣어야 돈다.
-    #   저쪽 `disaster_rules`(관측소·절기 기상통계)와 **다른 표**다. 섞지 말 것.
+    # ⚠ 저쪽 `disaster_rules`(관측소·절기 기상통계)와 **다른 표**다. 섞지 말 것.
+    #   2026-09-16 에 저쪽에 들어갔다 — app/models/farm/crop_disaster_rule.py
     "crop_disaster_rules": ["crop_name", "hazard", "rule_kind", "stage_name",
                             "metric", "op", "threshold_c", "duration_days", "severity"],
 }

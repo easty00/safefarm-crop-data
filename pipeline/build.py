@@ -40,7 +40,7 @@ OUT = HERE / "out"
 # 계약 — 저쪽 ORM 이 받는 칸. 늘리지 말 것
 # ─────────────────────────────────────────────────────────────────────
 계약 = {
-    "crops.csv": ["name", "base_temp", "upper_temp", "difficulty"],
+    "crops.csv": ["name", "base_temp", "upper_temp", "care_level", "difficulty"],
     "crop_variants.csv": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest"],
     "crop_stages.csv": ["crop_name", "maturity_type", "stage_order", "stage_name",
                         "gdd_from", "gdd_to", "water_need_mm", "fertilize_needed",
@@ -51,7 +51,8 @@ OUT = HERE / "out"
 
 # 근거 벌에 덧붙이는 칸. 저쪽으로 넘어가지 않는다
 덧칸 = {
-    "crops.csv": ["confirmed", "source"],
+    # confirmed 가 둘이다 — 온도(§B-2)와 관리노력(§H)의 확인 여부가 다르다
+    "crops.csv": ["confirmed", "care_confirmed", "source"],
     "crop_variants.csv": ["숙기원문", "품종수", "작형", "confirmed", "source"],
     "crop_stages.csv": ["작형", "시작중앙일", "종료중앙일", "source"],
     "crop_disaster_rules.csv": ["실린호", "원본수", "출처들", "조건원문", "source"],
@@ -121,26 +122,36 @@ def gdd목표():
 # crops — 확정표 §B-2 가 그대로 들어간다
 # ─────────────────────────────────────────────────────────────────────
 
-def crops(온도표):
-    """14행. base_temp 는 확정표 §B-2 채택값이다.
+def crops(온도표, 관리표):
+    """13행. base_temp·upper_temp 는 §B-2, care_level 은 §H 채택값이다.
 
     ⚠ `difficulty` 는 확정표 어디에도 없다. 비워 둔다(저쪽 ORM 도 nullable).
-      지어내면 "이 숫자 어디서 났냐" 에 답할 수 없다.
+      보도자료의 '재배하기 쉬운/보통/어려운' 은 §H 표를 풀어 쓰며 만든 표현이고
+      원본 43쪽 어디에도 없다. 지어내면 "이 값 어디서 났냐" 에 답할 수 없다.
+
+    ⚠ `care_level` 이 빈 작물이 있다(§H 에 줄이 없는 것). 그것도 비워 둔다 —
+      저쪽 ORM 이 nullable 이고, 억지로 채우면 §H 의 confirmed 표시가 무의미해진다.
+
+    ⚠ **confirmed 가 두 표에서 따로 온다.** §B-2 의 온도 confirmed 와 §H 의
+      care_level confirmed 는 다른 값이다. 근거 벌에 둘 다 남긴다 —
+      하나로 뭉치면 어느 값이 확인된 것인지 알 수 없게 된다.
     """
     행들 = []
     for 작물, v in 온도표.items():
         if 작물 not in MAIN_CROPS:
             print(f"  ⚠ 확정표에 있는데 등록표(crops.py)에 없는 작물: {작물}")
+        m = 관리표.get(작물)
         행들.append({
             "name": 작물,
             "base_temp": f"{v['base_temp']:.1f}" if v["base_temp"] is not None else "",
-            "difficulty": "",
             "upper_temp": f"{v['upper_temp']:.1f}" if v["upper_temp"] is not None else "",
+            "care_level": m["care_level"] if m else "",
+            "difficulty": "",
             "confirmed": v["confirmed"],
-            "source": "확정표 §B-2",
+            "care_confirmed": m["confirmed"] if m else "",
+            "source": "확정표 §B-2" + (" + §H" if m else ""),
         })
     return sorted(행들, key=lambda r: r["name"])
-
 
 # ─────────────────────────────────────────────────────────────────────
 # crop_variants — 숙기 접기 + 재배일수
@@ -682,6 +693,7 @@ def main():
     print("build — 확정표 + 중간 CSV → 스키마 3종\n")
     try:
         온도표 = spec.온도()
+        관리표 = spec.관리노력()
         작형표 = spec.작형()
         접기 = spec.숙기접기()
         수박표 = spec.수박숙기()
@@ -701,7 +713,7 @@ def main():
     if not 일정:
         print(f"  ⚠ {일정경로.name} 이 없습니다. crop_stages 가 빕니다")
 
-    c = crops(온도표)
+    c = crops(온도표, 관리표)
     v = crop_variants(온도표, 작형표, 접기, 수박표, 분할작물, 품종들)
     # 역산값을 얹는다. crop_variants 안에서 채우지 않는 이유 —
     # gdd_target 은 작물 단위라 숙기별로 다르지 않은데, 그 함수는 숙기마다
