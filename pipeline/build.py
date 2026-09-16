@@ -55,14 +55,15 @@ OUT = HERE / "out"
                         "guide_text"],
     "crop_disaster_rules.csv": ["crop_name", "hazard", "rule_kind", "stage_name",
                                 "metric", "op", "threshold_c", "duration_days", "severity"],
-    # 줄글. 정형 수치와 달리 '문서' 다 — 저쪽 chunker.py 가 잘라 임베딩한다
-    "crop_docs.csv": ["crop_name", "cultivation_type", "section", "topic",
-                      "body", "source_file", "source_loc"],
     # 품종 카탈로그. 작물 필터 없이 2,599품종 전부 — 43작물이라 crops 와 FK 를 걸지 않는다.
     # variety_no 는 농사로 cntntsNo. 재수집해도 안 바뀌는 자연키다
     "varieties.csv": ["variety_no", "crop_group", "crop_name", "variety_group", "name",
                       "maturity_raw", "maturity_type", "use", "zone", "bred_year", "breeder",
                       "summary", "body", "source_file"],
+    # 재배법·재해대책·생리특성 문장. crop_stages.guide_text(단계당 한 줄)와 달리 작물당 여러 덩이.
+    # 작물 필터 없음 — crop_name 은 한글 표준이름, 저쪽이 crops.crop_id 를 찾되 못 찾아도 넣는다
+    "crop_guides.csv": ["crop_name", "cultivation_type", "section", "topic",
+                        "body", "source_file", "source_loc"],
 }
 
 
@@ -73,10 +74,9 @@ OUT = HERE / "out"
     "crop_variants.csv": ["숙기원문", "품종수", "작형", "confirmed", "source"],
     "crop_stages.csv": ["작형", "시작중앙일", "종료중앙일", "source"],
     "crop_disaster_rules.csv": ["실린호", "원본수", "출처들", "조건원문", "source"],
-    # 줄글은 덧붙일 근거 칸이 없다 — source_file·source_loc 이 이미 계약 안에 있다
-    "crop_docs.csv": [],
     # 근거 벌에만: 숙기를 어디서 읽었는지, 첨부가 무엇이었는지
     "varieties.csv": ["숙기근거", "첨부파일", "source"],
+    "crop_guides.csv": [],          # 출처가 계약 안(source_file·source_loc)에 있다. 근거 벌에 더할 것이 없다
 }
 
 
@@ -917,14 +917,23 @@ _찌꺼기 = re.compile(
     r"^\s*(===== p\.\d+ =====|- \d+ -|그림입니다\.?|사각형입니다\.?|원본 그림의 (이름|크기): .*)\s*$"
 )
 
+_한글 = re.compile(r"[가-힣]")
+
+# 줄에서 한글이 이 비율 미만이면 표가 한 줄로 펴진 것으로 본다.
+# 0.2 인 근거: 품종 색인 실측에서 한글 10% 미만 292조각·10~30% 1,745조각이 전부 숫자표였고
+# ('0.011.72 ± 0.060.09 ± 0.00Glucoerucin...'), 30% 이상부터 문장이 섞여 나왔다.
+# 더 올리면 '25℃ 에서 10일' 같은 짧은 수치 문장이 같이 날아간다
+_한글하한 = 0.2
+
 
 def clean_body(text):
     """첨부 본문에서 사람이 읽을 줄만 남긴다. 자르지 않는다 — 청킹은 저쪽 chunker.py 몫이다.
 
-    버리는 것 셋:
-      찌꺼기      쪽 표시·그림 자리표시자. _찌꺼기
-      표 조각     6자 이하 줄. 표를 펴면 칸 하나가 한 줄이 된다 ('93.8' '수미' '편타원')
-                 문장은 6자 안에 끝나지 않으므로 잃는 것이 없다
+    버리는 것 넷:
+      찌꺼기       쪽 표시·그림 자리표시자. _찌꺼기
+      표 조각      6자 이하 줄. 표를 펴면 칸 하나가 한 줄이 된다 ('93.8' '수미' '편타원')
+                  문장은 6자 안에 끝나지 않으므로 잃는 것이 없다
+      펴진 표 줄   한글이 _한글하한 미만인 줄. 6자 필터를 빠져나간 표가 여기 걸린다
       빈 줄
 
     이어 붙이는 것: PDF 는 40자쯤에서 줄을 강제로 바꾼다 ('수량 감소가 크' / '다.').
@@ -934,6 +943,9 @@ def clean_body(text):
     for 줄 in text.splitlines():
         s = 줄.strip()
         if not s or _찌꺼기.match(s) or len(s) <= 6:
+            continue
+        # 표가 한 줄로 펴진 것. 숫자·기호만 있는 줄은 임베딩하면 노이즈다
+        if len(_한글.findall(s)) / len(s) < _한글하한:
             continue
         if 줄들 and not re.search(r"[.。]$|[다음함임됨]\s*$", 줄들[-1]):
             줄들[-1] += s          # 강제 줄바꿈 복원
@@ -1061,9 +1073,9 @@ def main():
     내기("crop_variants.csv", v)
     내기("crop_stages.csv", s)
     내기("crop_disaster_rules.csv", d)
-    내기("crop_docs.csv", crop_docs(본문))
     # 품종들·접기 는 이 함수 위에서 이미 읽어 둔 값이다 (crop_variants 가 쓴다)
     내기("varieties.csv", varieties(품종들, 접기))
+    내기("crop_guides.csv", crop_docs(본문))     # 본문 은 위에서 이미 읽었다
 
     if 제외셈:
         print("\n  · 경보로 안 넣은 규칙")

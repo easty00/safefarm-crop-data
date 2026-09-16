@@ -24,7 +24,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 스키마 = HERE / "out" / "스키마"
-테이블 = ["crops", "crop_variants", "crop_stages", "crop_disaster_rules", "varieties"]
+테이블 = ["crops", "crop_variants", "crop_stages", "crop_disaster_rules", "varieties", "crop_guides"]
 
 # ─────────────────────────────────────────────────────────────────────
 # 저쪽 계약 — 베낀 것이다. 저쪽이 바뀌면 여기도 바꾼다
@@ -44,6 +44,8 @@ sys.path.insert(0, str(HERE))
     "varieties": ["variety_no", "crop_group", "crop_name", "variety_group", "name",
                   "maturity_raw", "maturity_type", "use", "zone", "bred_year", "breeder",
                   "summary", "body", "source_file"],     # build.py 계약과 글자까지 같아야 한다     # build.py 계약과 글자까지 같아야 한다
+    "crop_guides": ["crop_name", "cultivation_type", "section", "topic",
+                    "body", "source_file", "source_loc"],
 }
 
 # nullable=False 인 칸. 비면 적재가 깨진다
@@ -55,6 +57,7 @@ sys.path.insert(0, str(HERE))
     "crop_disaster_rules": ["crop_name", "hazard", "rule_kind", "metric", "op",
                             "threshold_c"],
     "varieties": ["variety_no", "crop_name", "name"],
+    "crop_guides": ["crop_name", "section", "topic", "body"],
 }
 
 UNIQUE = [
@@ -63,6 +66,7 @@ UNIQUE = [
     ("crop_stages", ["crop_name", "maturity_type", "stage_order"]),
     ("crop_disaster_rules", ["crop_name", "rule_kind", "stage_name", "severity"]),
     ("varieties", ["variety_no"]),
+    ("crop_guides", ["crop_name", "cultivation_type", "section", "topic"]),
 ]
 
 REFS = [
@@ -79,6 +83,10 @@ REFS = [
 hazard값 = ("frost", "heat")
 metric값 = ("ta_min", "ta_max", "ta_avg")
 op값 = ("lte", "gte")
+
+# ck_crop_guides_section. build.py 의 문서구분 을 import 하지 않고 한 번 더 적는다 —
+# 검사가 검사 대상을 import 하면 둘이 같이 틀릴 수 있다
+section값 = ("재배법", "기상재해대책", "생리적특성")
 
 
 def 읽기():
@@ -169,6 +177,12 @@ def 제약(자료):
                       if r.get(칸이름) and r[칸이름] not in 허용})
         if 나쁨:
             문제.append(f"crop_disaster_rules.{칸이름}: {'/'.join(허용)} 가 아닌 값 {나쁨}")
+
+    나쁜구분 = sorted({r["section"] for r in 자료.get("crop_guides", [])
+                     if r.get("section") and r["section"] not in section값})
+    if 나쁜구분:
+        문제.append(f"crop_guides.section: {'/'.join(section값)} 가 아닌 값 {나쁜구분}"
+                    "  (ck_crop_guides_section 에 걸린다)")
 
     for i, r in enumerate(자료["crop_stages"], 2):
         a, b = _정수(r.get("gdd_from")), _정수(r.get("gdd_to"))
