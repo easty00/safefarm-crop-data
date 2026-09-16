@@ -130,14 +130,14 @@ def 온도():
     return out
 
 # ─────────────────────────────────────────────────────────────────────
-# §H 관리 노력 — crops.care_level
+# §H 관리 노력 — crops.difficulty
 # ─────────────────────────────────────────────────────────────────────
 
 _등급 = {"강", "중", "약"}
 
 
 def 관리노력():
-    """{작물: {care_level, confirmed, 근거}}. 등록된 작물만.
+    """{작물: {difficulty, confirmed, 근거}}. 등록된 작물만.
 
     ⚠ **난이도가 아니다.** '얼마나 자주 돌보나' 다(강=거의 매일 · 중=주 1~2회 ·
       약=월 1~2회). 원본에 난이도(쉬움·보통·어려움) 표는 없다 — §H 참고.
@@ -146,21 +146,21 @@ def 관리노력():
       고치는 문서라 '중하' 같은 딴 척도가 섞여 들어올 수 있다. 그대로 흘려보내면
       저쪽 CHECK 제약에서 적재가 통째로 깨진다.
     """
-    행들 = 표찾기(["작물", "care_level", "confirmed"])
+    행들 = 표찾기(["작물", "difficulty", "confirmed"])
     out = {}
     for r in 행들:
         작물 = re.sub(r"[*`~\s]", "", r["작물"])
         if not 작물 or 작물 not in CROP_ALIAS:
             continue                      # 등록표에 없는 작물
-        등급 = re.sub(r"[*`\s]", "", r["care_level"])
+        등급 = re.sub(r"[*`\s]", "", r["difficulty"])
         if not 등급 or 등급 == "—":
             continue                      # 비워 둔 작물. 값이 없는 것이 맞다
         if 등급 not in _등급:
             raise 확정표오류(
-                f"{작물}.care_level 이 '{등급}' 입니다 — 강·중·약 셋 중 하나여야 합니다"
+                f"{작물}.difficulty 가 '{등급}' 입니다 — 강·중·약 셋 중 하나여야 합니다"
             )
         out[작물] = {
-            "care_level": 등급,
+            "difficulty": 등급,
             "confirmed": "Y" if re.sub(r"[*`\s]", "", r["confirmed"])[:1] == "Y" else "N",
             "근거": r.get("근거", ""),
         }

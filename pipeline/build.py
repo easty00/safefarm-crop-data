@@ -40,7 +40,7 @@ OUT = HERE / "out"
 # 계약 — 저쪽 ORM 이 받는 칸. 늘리지 말 것
 # ─────────────────────────────────────────────────────────────────────
 계약 = {
-    "crops.csv": ["name", "base_temp", "upper_temp", "care_level", "difficulty"],
+    "crops.csv": ["name", "base_temp", "upper_temp", "difficulty"],
     "crop_variants.csv": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest"],
     "crop_stages.csv": ["crop_name", "maturity_type", "stage_order", "stage_name",
                         "gdd_from", "gdd_to", "water_need_mm", "fertilize_needed",
@@ -52,7 +52,7 @@ OUT = HERE / "out"
 # 근거 벌에 덧붙이는 칸. 저쪽으로 넘어가지 않는다
 덧칸 = {
     # confirmed 가 둘이다 — 온도(§B-2)와 관리노력(§H)의 확인 여부가 다르다
-    "crops.csv": ["confirmed", "care_confirmed", "source"],
+    "crops.csv": ["confirmed", "difficulty_confirmed", "source"],
     "crop_variants.csv": ["숙기원문", "품종수", "작형", "confirmed", "source"],
     "crop_stages.csv": ["작형", "시작중앙일", "종료중앙일", "source"],
     "crop_disaster_rules.csv": ["실린호", "원본수", "출처들", "조건원문", "source"],
@@ -123,17 +123,17 @@ def gdd목표():
 # ─────────────────────────────────────────────────────────────────────
 
 def crops(온도표, 관리표):
-    """13행. base_temp·upper_temp 는 §B-2, care_level 은 §H 채택값이다.
+    """13행. base_temp·upper_temp 는 §B-2, difficulty 는 §H 채택값이다.
 
     ⚠ `difficulty` 는 확정표 어디에도 없다. 비워 둔다(저쪽 ORM 도 nullable).
       보도자료의 '재배하기 쉬운/보통/어려운' 은 §H 표를 풀어 쓰며 만든 표현이고
       원본 43쪽 어디에도 없다. 지어내면 "이 값 어디서 났냐" 에 답할 수 없다.
 
-    ⚠ `care_level` 이 빈 작물이 있다(§H 에 줄이 없는 것). 그것도 비워 둔다 —
+    ⚠ `difficulty` 가 빈 작물이 있다(§H 에 줄이 없는 것). 그것도 비워 둔다 —
       저쪽 ORM 이 nullable 이고, 억지로 채우면 §H 의 confirmed 표시가 무의미해진다.
 
     ⚠ **confirmed 가 두 표에서 따로 온다.** §B-2 의 온도 confirmed 와 §H 의
-      care_level confirmed 는 다른 값이다. 근거 벌에 둘 다 남긴다 —
+      difficulty confirmed 는 다른 값이다. 근거 벌에 둘 다 남긴다 —
       하나로 뭉치면 어느 값이 확인된 것인지 알 수 없게 된다.
     """
     행들 = []
@@ -145,10 +145,9 @@ def crops(온도표, 관리표):
             "name": 작물,
             "base_temp": f"{v['base_temp']:.1f}" if v["base_temp"] is not None else "",
             "upper_temp": f"{v['upper_temp']:.1f}" if v["upper_temp"] is not None else "",
-            "care_level": m["care_level"] if m else "",
-            "difficulty": "",
+            "difficulty": m["difficulty"] if m else "",
             "confirmed": v["confirmed"],
-            "care_confirmed": m["confirmed"] if m else "",
+            "difficulty_confirmed": m["confirmed"] if m else "",
             "source": "확정표 §B-2" + (" + §H" if m else ""),
         })
     return sorted(행들, key=lambda r: r["name"])
@@ -750,9 +749,15 @@ def main():
         for 종류, n in sorted(제외셈.items()):
             print(f"      {종류:10}{n:>4}행   {재해제외[종류]}")
 
+    # ⚠ gdd_from 은 0 이 정상값이라 `not r["gdd_from"]` 로 세면 첫 단계가 늘 빈 것이 된다.
+    #   빈 칸은 빈 문자열이므로 그것만 센다
     빈gdd = sum(1 for r in v if not r["gdd_target"])
-    print(f"\n⚠ gdd_target 이 빈 행 {빈gdd}/{len(v)} · gdd_from/to 가 빈 행 {len(s)}/{len(s)}")
-    print("   일별 기온 역산이 있어야 찹니다(확정표 §C). 그 전까지는 넘기면 안 됩니다.")
+    빈구간 = sum(1 for r in s if r["gdd_from"] == "" or r["gdd_to"] == "")
+    if 빈gdd or 빈구간:
+        print(f"\n⚠ gdd_target 이 빈 행 {빈gdd}/{len(v)} · gdd_from/to 가 빈 행 {빈구간}/{len(s)}")
+        print("   일별 기온 역산이 있어야 찹니다(확정표 §C). 그 전까지는 넘기면 안 됩니다.")
+    else:
+        print(f"\ngdd_target {len(v)}행 · gdd 구간 {len(s)}행 전부 찼습니다")
     print("\n다음: python pipeline/verify.py")
     return 0
 

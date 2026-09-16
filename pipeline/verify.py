@@ -31,7 +31,7 @@ sys.path.insert(0, str(HERE))
 # ─────────────────────────────────────────────────────────────────────
 
 칸 = {
-    "crops": ["name", "base_temp", "upper_temp", "care_level", "difficulty"],
+    "crops": ["name", "base_temp", "upper_temp", "difficulty"],
     "crop_variants": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest"],
     "crop_stages": ["crop_name", "maturity_type", "stage_order", "stage_name",
                     "gdd_from", "gdd_to", "water_need_mm", "fertilize_needed",
