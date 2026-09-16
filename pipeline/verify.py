@@ -31,12 +31,12 @@ sys.path.insert(0, str(HERE))
 # ─────────────────────────────────────────────────────────────────────
 
 칸 = {
-    "crops": ["name", "base_temp", "difficulty"],
+    "crops": ["name", "base_temp", "upper_temp", "difficulty"],
     "crop_variants": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest"],
     "crop_stages": ["crop_name", "maturity_type", "stage_order", "stage_name",
                     "gdd_from", "gdd_to", "water_need_mm", "fertilize_needed",
                     "guide_text"],
-    # ⚠ 아직 저쪽에 없는 표다. `pipeline/제안_crop_disaster_rule.py` 를 넣어야 돈다.
+    # ⚠ 아직 저쪽에 없는 표다. `pipeline/proposal_crop_disaster_rule.py` 를 넣어야 돈다.
     #   저쪽 `disaster_rules`(관측소·절기 기상통계)와 **다른 표**다. 섞지 말 것.
     "crop_disaster_rules": ["crop_name", "hazard", "rule_kind", "stage_name",
                             "metric", "op", "threshold_c", "duration_days", "severity"],
@@ -318,11 +318,11 @@ def main():
     print()
     if 총:
         print(f"검사 실패 {len(총)}건 — 지금 넘기면 적재가 깨집니다")
-        print("  Safe-farm/ai-service/data/dummy/ 로 복사하지 마세요")
+        print("  Safe-farm/ai-service/data/master/ 로 복사하지 마세요")
         return 1
     print("검사 통과 — 세 파일을 Safe-farm 으로 넘겨도 됩니다")
-    print("  → Safe-farm/ai-service/data/dummy/ 에 놓고")
-    print("     py -3.12 -m pipeline.farm.master_seed_farm_db --check")
+    print("  → Safe-farm/ai-service/data/master/ 에 놓고")
+    print("     py -m pipeline.farm.master_seed_farm_db --check")
     return 0
 
 

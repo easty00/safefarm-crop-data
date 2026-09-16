@@ -8,9 +8,12 @@
 #   `read_csv(directory / f"{name}.csv")` 로 읽는다. 이름을 바꾸면 안 된다.
 #
 # ★ **칸도 계약이다.** 저쪽 ORM 이 받는 칸만 낸다. 늘리면 적재가 깨진다.
-#   그래서 `source` · `confirmed` · `upper_temp` 는 근거/ 쪽에만 둔다 —
-#   저쪽 ORM 에 그 칸이 없다. CLAUDE.md "모든 숫자에 source 와 confirmed 를 붙인다"
-#   는 이 폴더 안에서 지킨다.
+#   그래서 `source` · `confirmed` 는 근거/ 쪽에만 둔다 — 저쪽 ORM 에 그 칸이 없다.
+#   CLAUDE.md "모든 숫자에 source 와 confirmed 를 붙인다" 는 이 폴더 안에서 지킨다.
+#
+#   `upper_temp` 는 2026-09-16 에 계약으로 옮겼다. 저쪽 crops 에 컬럼이 생겼고
+#   (app/models/farm/crop.py), gdd.ts 의 dailyGdd 가 이 값을 받아 Modified 로 간다.
+#   값이 없으면 전부 Standard 로 돌아 폭염일이 15% 부풀려진다.
 #
 # ⚠ **GDD 세 칸은 비운다.** gdd_target · gdd_from · gdd_to 는 일별 기온 역산이
 #   있어야 나온다(확정표 §C — 11작물은 목표값 자체가 없고, 벼·수박은 ② 단위라
@@ -37,7 +40,7 @@ OUT = HERE / "out"
 # 계약 — 저쪽 ORM 이 받는 칸. 늘리지 말 것
 # ─────────────────────────────────────────────────────────────────────
 계약 = {
-    "crops.csv": ["name", "base_temp", "difficulty"],
+    "crops.csv": ["name", "base_temp", "upper_temp", "difficulty"],
     "crop_variants.csv": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest"],
     "crop_stages.csv": ["crop_name", "maturity_type", "stage_order", "stage_name",
                         "gdd_from", "gdd_to", "water_need_mm", "fertilize_needed",
@@ -48,7 +51,7 @@ OUT = HERE / "out"
 
 # 근거 벌에 덧붙이는 칸. 저쪽으로 넘어가지 않는다
 덧칸 = {
-    "crops.csv": ["upper_temp", "confirmed", "source"],
+    "crops.csv": ["confirmed", "source"],
     "crop_variants.csv": ["숙기원문", "품종수", "작형", "confirmed", "source"],
     "crop_stages.csv": ["작형", "시작중앙일", "종료중앙일", "source"],
     "crop_disaster_rules.csv": ["실린호", "원본수", "출처들", "조건원문", "source"],
