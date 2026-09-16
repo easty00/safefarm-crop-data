@@ -19,7 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from crops import CROP_ALIAS, MAIN_CROPS  # noqa: E402
+from crops import ALL_CROPS, CROP_ALIAS  # noqa: E402
 from common import era_edge, middle_day  # noqa: E402
 
 정본 = HERE.parent / "GDD계산관련" / "작물_확정표.md"
@@ -123,10 +123,11 @@ def 온도():
         }
     if not out:
         raise 확정표오류("§B-2 채택값 표가 비었습니다")
-    빠짐 = sorted(MAIN_CROPS - set(out))
-    if 빠짐:
-        print(f"  ⚠ 확정표 §B-2 에 줄이 없는 본선 작물: {', '.join(빠짐)}")
-        print("      base_temp 가 없어 적산온도를 못 쌓습니다")
+    # ⚠ 예전에는 "§B-2 에 줄이 없는 본선 작물" 을 하나하나 알렸다. 그때는 등록 작물이
+    #   13종이라 빠진 것이 곧 사고였다. 지금은 원본에 있는 작물이 전부 들어오므로
+    #   §B-2 에 없는 쪽이 정상이다. **빠진 이름 대신 덮은 넓이를 알린다.**
+    print(f"  · §B-2 온도 {len(out)}작물 / 원본 {len(ALL_CROPS)}작물"
+          f" — 나머지는 base_temp 가 비어 적산온도를 못 쌓습니다")
     return out
 
 # ─────────────────────────────────────────────────────────────────────
@@ -166,9 +167,7 @@ def 관리노력():
         }
     if not out:
         raise 확정표오류("§H 관리 노력 표가 비었습니다")
-    빠짐 = sorted(MAIN_CROPS - set(out))
-    if 빠짐:
-        print(f"  ⚠ 확정표 §H 에 줄이 없는 본선 작물: {', '.join(빠짐)}")
+    print(f"  · §H 관리노력 {len(out)}작물 / 원본 {len(ALL_CROPS)}작물")
     return out
 
 

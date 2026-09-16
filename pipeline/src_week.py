@@ -23,7 +23,7 @@ from common import (  # noqa: E402
     dump_raw, fix_pdf_cols, limit_table, nospace, read_doc, rows_out, set_out,
     temp_from_sentence, tidy, to_num,
 )
-from crops import CROP_ALIAS, RICE, crops_in_line, is_main  # noqa: E402
+from crops import CROP_ALIAS, RICE, crops_in_line  # noqa: E402
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ def merged_limit_table(g, gi, fname):
                 if not v or v == "-" or not m:
                     continue
                 out.append({
-                    "작물": 작물 or tidy(원문이름), "본선": is_main(작물),
+                    "작물": 작물 or tidy(원문이름),
                     "재해종류": 종류, "생육단계": 항목,
                     "지표": 지표, "부등호": 부등호,
                     "값": to_num(m.group(1)), "단위": "℃", "지속일": "", "등급": "",

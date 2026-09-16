@@ -21,7 +21,7 @@ RAW = ROOT / "원본"
 OUT = HERE / "out"
 sys.path.insert(0, str(ROOT / "feature"))
 
-from crops import AMBIGUOUS, CROP_ALIAS, is_main, nospace  # noqa: E402
+from crops import AMBIGUOUS, CROP_ALIAS, nospace  # noqa: E402
 from hwpx_table import grids_of, read_any  # noqa: E402
 
 # 산출물을 어디에 쓸지. 원본별 스크립트는 out/원본별/<이름>/ 을 가리킨다.
@@ -43,7 +43,7 @@ COLS = {
                      "실린호", "원본수", "출처들", "원문", "출처파일", "위치"],
     "mid_sumtemp.csv": ["원본", "작물", "품종숙기", "일수", "적산온도", "구간",
                         "실린호", "원본수", "출처들", "원문", "출처파일", "위치"],
-    "mid_rule.csv": ["원본", "작물", "본선", "재해종류", "생육단계", "지표", "부등호", "값", "단위",
+    "mid_rule.csv": ["원본", "작물", "재해종류", "생육단계", "지표", "부등호", "값", "단위",
                      "지속일", "등급", "실린호", "원본수", "출처들", "출처파일수",
                      "조건원문", "출처", "출처파일", "위치"],
     "mid_text.csv": ["원본", "작물", "구분", "절", "항목", "깊이", "실린호", "원본수", "출처들", "본문", "출처파일", "위치"],
@@ -811,7 +811,7 @@ def limit_table(g, gi, fname, is_생육장애):
                 else:
                     종류, 지표, 부등호 = "단계별저온", "최저기온", "<="
                 out.append({
-                    "작물": 작물 or 작물원문, "본선": is_main(작물),
+                    "작물": 작물 or 작물원문,
                     "재해종류": 종류, "생육단계": 항목,
                     "지표": 지표, "부등호": 부등호,
                     "값": to_num(m.group(1)), "단위": "℃", "지속일": "", "등급": "",

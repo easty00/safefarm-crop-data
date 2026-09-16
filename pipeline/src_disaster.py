@@ -22,7 +22,7 @@ from common import (  # noqa: E402
     COLS, N, NUM, OUT, RAW, TEMP_RANGE, clear_read_cache, dump_raw, fix_pdf_cols,
     limit_table, nospace, read_doc, rows_out, set_out, temp_from_sentence, tidy, to_num,
 )
-from crops import CROP_ALIAS, MAIN_CROPS, RICE, is_main  # noqa: E402
+from crops import ALL_CROPS, CROP_ALIAS, RICE  # noqa: E402
 from hwpx_table import parse_threshold  # noqa: E402
 
 
@@ -36,7 +36,7 @@ SKIP_SERIES = {"저온해"}
 
 
 def series_crop_hit(p):
-    """건너뛸 계열의 파일에 등록 작물이 실제로 없는지 본다. 있으면 그 이름을 돌려준다.
+    """건너뛸 계열의 파일에 작물이 실제로 없는지 본다. 있으면 그 이름을 돌려준다.
 
     ⚠ 한 글자 작물(벼·무·파)은 아무 데나 걸린다. '배수' 의 '배', '파종' 의 '파'.
       그래서 한 글자는 괄호나 조사가 붙은 꼴만 인정한다.
@@ -44,7 +44,7 @@ def series_crop_hit(p):
     글, _ = read_doc(p)
     if not 글:
         return ""
-    for 이름 in sorted(MAIN_CROPS, key=len, reverse=True):
+    for 이름 in sorted(ALL_CROPS, key=len, reverse=True):
         if len(이름) == 1:
             if re.search(rf"[(（]\s*{이름}\s*[)）]|{이름}(?:는|은|의|가|를|에|와|과)", 글):
                 return 이름
@@ -92,7 +92,7 @@ def disorder_body_table(g, gi, fname):
             v = one(row[ci]) if ci < len(row) else ""
             if v != "":
                 rule.append({
-                    "작물": 작물, "본선": is_main(작물), "재해종류": 종류, "생육단계": 항목,
+                    "작물": 작물, "재해종류": 종류, "생육단계": 항목,
                     "지표": 지표, "부등호": 부등호, "값": v, "단위": "℃",
                     "지속일": "", "등급": "", "조건원문": tidy(row[ci])[:120],
                     "출처": "생육및장애온도표", "출처파일": fname,
@@ -102,7 +102,7 @@ def disorder_body_table(g, gi, fname):
         동해 = one(꼬리)
         if 동해 != "":
             rule.append({
-                "작물": 작물, "본선": is_main(작물), "재해종류": "동해", "생육단계": "동해온도",
+                "작물": 작물, "재해종류": "동해", "생육단계": "동해온도",
                 "지표": "최저기온", "부등호": "<=", "값": 동해, "단위": "℃",
                 "지속일": "", "등급": "", "조건원문": 꼬리[:120],
                 "출처": "생육및장애온도표", "출처파일": fname,
@@ -180,7 +180,7 @@ def winter_limit_table(g, gi, fname):
     out = []
     for (작물, 단계, 유형), (값, 원문, 위치) in best.items():
         out.append({
-            "작물": 작물, "본선": is_main(작물),
+            "작물": 작물,
             "재해종류": "동해", "생육단계": 단계,
             "지표": "최저기온", "부등호": "<=",
             "값": f"{값:g}", "단위": "℃", "지속일": "", "등급": "",
@@ -247,7 +247,7 @@ def rice_stage_table(g, gi, fname):
             if not v or not m:
                 continue
             out.append({
-                "작물": RICE, "본선": is_main(RICE),
+                "작물": RICE,
                 "재해종류": 종류, "생육단계": 단계,
                 "지표": 지표, "부등호": 부등호,
                 "값": to_num(m.group(1)), "단위": "℃", "지속일": "", "등급": "",
@@ -297,7 +297,6 @@ def from_disaster():
                     for t in parse_threshold(row[2], "최고기온"):
                         rule.append({
                             "작물": 작물 or tidy(row[0]),
-                            "본선": is_main(작물),
                             "재해종류": "고온해", "생육단계": tidy(row[1]),
                             "지표": t.get("지표", ""), "부등호": t.get("부등호", ""),
                             "값": t.get("값", ""), "단위": t.get("단위", "℃"),

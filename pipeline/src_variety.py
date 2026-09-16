@@ -30,7 +30,7 @@ from common import (  # noqa: E402
     COLS, OUT, RAW, clear_read_cache, dump_raw, nospace, read_doc, rows_out,
     set_out, temp_from_sentence, tidy, to_num,
 )
-from crops import CROP_ALIAS, is_main  # noqa: E402
+from crops import CROP_ALIAS  # noqa: E402
 from sections import parse_sections  # noqa: E402
 
 NAME = "품종정보"
@@ -263,7 +263,7 @@ def 품종목록():
                 근거 = ""
             숙기 = 코드숙기 or 특성숙기
             품종.append({
-                "원본": NAME, "작물": 작물, "본선": is_main(작물),
+                "원본": NAME, "작물": 작물,
                 "cntntsNo": g("cntntsNo"), "품종명": tidy(g("cntntsSj")),
                 "작물원문": svc,
                 "숙기": 숙기,
@@ -662,7 +662,7 @@ def 첨부읽기(품종들):
 #   extract.py 는 COLS 에 있는 파일만 모으므로 이 파일은 건드리지 않는다.
 #   → build.py 가 crop_variants 를 만들 때 이 파일을 읽으면 된다.
 VARIETY_COLS = [
-    "원본", "작물", "본선", "cntntsNo", "품종명", "작물원문",
+    "원본", "작물", "cntntsNo", "품종명", "작물원문",
     "숙기", "숙기가능성", "숙기근거", "숙기충돌",
     "숙기_코드", "숙기_주요특성", "숙기_본문",
     "숙기코드", "숙기코드명", "숙기원문",
@@ -736,13 +736,13 @@ def main():
         rows_out(이름, 행, COLS[이름])
     rows_out("varieties.csv", 품종들, VARIETY_COLS)
 
-    본선 = [v for v in 품종들 if v["본선"]]
+    이름있음 = [v for v in 품종들 if v["작물"]]
     print(f"  숙기 채워진 품종 {sum(1 for v in 품종들 if v['숙기'])}/{len(품종들)}건"
-          f" · 등록 작물 {sum(1 for v in 본선 if v['숙기'])}/{len(본선)}건")
-    셈 = Counter(v["숙기"] for v in 본선 if v["숙기"])
+          f" · 작물 이름이 풀린 품종 {len(이름있음)}건")
+    셈 = Counter(v["숙기"] for v in 품종들 if v["숙기"])
     if 셈:
-        print("  등록 작물 숙기 — " + " · ".join(f"{k} {n}" for k, n in 셈.most_common()))
-    가능성 = sum(1 for v in 본선 if v["숙기가능성"])
+        print("  숙기 — " + " · ".join(f"{k} {n}" for k, n in 셈.most_common()))
+    가능성 = sum(1 for v in 품종들 if v["숙기가능성"])
     if 가능성:
         print(f"      그중 조중생 {가능성}건 — 접는 갈래는 build 가 정한다 (숙기가능성 칸)")
     시기셈 = Counter(이름 for v in 품종들 for 이름 in 시기항목 if v[이름])

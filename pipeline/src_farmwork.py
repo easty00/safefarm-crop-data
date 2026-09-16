@@ -26,7 +26,7 @@ from common import (  # noqa: E402
     COLS, NUM, OUT, RAW, TEMP_RANGE, temp_kind, clear_read_cache, dump_raw, month_fix, nospace,
     read_doc, rows_out, set_out, temp_from_sentence, tidy, to_num,
 )
-from crops import RAW_NAMES, is_main, registry_report  # noqa: E402
+from crops import RAW_NAMES, registry_report  # noqa: E402
 from sections import parse_sections  # noqa: E402
 
 
@@ -399,7 +399,7 @@ def 동해규칙(온도행들):
         if 값 == "" or 값 is None:
             continue
         규칙.append({
-            "작물": t["작물"], "본선": is_main(t["작물"]),
+            "작물": t["작물"],
             "재해종류": "동해", "생육단계": "",
             "지표": "최저기온", "부등호": "<=", "값": 값, "단위": "℃",
             "지속일": "", "등급": "",

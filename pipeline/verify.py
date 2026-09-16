@@ -24,7 +24,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 스키마 = HERE / "out" / "스키마"
-테이블 = ["crops", "crop_variants", "crop_stages", "crop_disaster_rules"]
+테이블 = ["crops", "crop_variants", "crop_stages", "crop_disaster_rules", "varieties"]
 
 # ─────────────────────────────────────────────────────────────────────
 # 저쪽 계약 — 베낀 것이다. 저쪽이 바뀌면 여기도 바꾼다
@@ -32,7 +32,8 @@ sys.path.insert(0, str(HERE))
 
 칸 = {
     "crops": ["name", "base_temp", "upper_temp", "difficulty"],
-    "crop_variants": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest"],
+    "crop_variants": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest",
+                      "sow_method", "sow_from", "sow_to"],
     "crop_stages": ["crop_name", "maturity_type", "stage_order", "stage_name",
                     "gdd_from", "gdd_to", "water_need_mm", "fertilize_needed",
                     "guide_text"],
@@ -40,6 +41,9 @@ sys.path.insert(0, str(HERE))
     #   2026-09-16 에 저쪽에 들어갔다 — app/models/farm/crop_disaster_rule.py
     "crop_disaster_rules": ["crop_name", "hazard", "rule_kind", "stage_name",
                             "metric", "op", "threshold_c", "duration_days", "severity"],
+    "varieties": ["variety_no", "crop_group", "crop_name", "variety_group", "name",
+                  "maturity_raw", "maturity_type", "use", "zone", "bred_year", "breeder",
+                  "summary", "body", "source_file"],     # build.py 계약과 글자까지 같아야 한다     # build.py 계약과 글자까지 같아야 한다
 }
 
 # nullable=False 인 칸. 비면 적재가 깨진다
@@ -50,6 +54,7 @@ sys.path.insert(0, str(HERE))
                     "gdd_from", "gdd_to", "fertilize_needed"],
     "crop_disaster_rules": ["crop_name", "hazard", "rule_kind", "metric", "op",
                             "threshold_c"],
+    "varieties": ["variety_no", "crop_name", "name"],
 }
 
 UNIQUE = [
@@ -57,6 +62,7 @@ UNIQUE = [
     ("crop_variants", ["crop_name", "maturity_type"]),
     ("crop_stages", ["crop_name", "maturity_type", "stage_order"]),
     ("crop_disaster_rules", ["crop_name", "rule_kind", "stage_name", "severity"]),
+    ("varieties", ["variety_no"]),
 ]
 
 REFS = [
@@ -153,6 +159,11 @@ def 제약(자료):
     if 나쁜숙기2:
         문제.append(f"crop_stages.maturity_type: EARLY/MID/LATE 가 아닌 값 {나쁜숙기2}")
 
+    나쁜숙기3 = sorted({r["maturity_type"] for r in 자료.get("varieties", [])
+                      if r.get("maturity_type") and r["maturity_type"] not in 숙기값})
+    if 나쁜숙기3:
+        문제.append(f"varieties.maturity_type: EARLY/MID/LATE 가 아니거나 빈 값이 아닌 값 {나쁜숙기3}")
+
     for 칸이름, 허용 in [("hazard", hazard값), ("metric", metric값), ("op", op값)]:
         나쁨 = sorted({r[칸이름] for r in 자료.get("crop_disaster_rules", [])
                       if r.get(칸이름) and r[칸이름] not in 허용})
@@ -225,12 +236,16 @@ def 단계연속(자료):
         단계.setdefault((r.get("crop_name"), r.get("maturity_type")), []).append(r)
 
     문제 = []
+    없음 = 0
     for v in 자료["crop_variants"]:
         열쇠 = (v.get("crop_name"), v.get("maturity_type"))
         이름 = f"{열쇠[0]}/{열쇠[1]}"
         행들 = 단계.get(열쇠)
         if not 행들:
-            문제.append(f"{이름}: 단계가 하나도 없다")
+            # 단계가 없는 것은 이제 정상이다. 농작업일정 erajson 에 생육과정이 실린 작물만
+            # crop_stages 가 나온다. 나머지는 GDD 판정만 못 할 뿐 카탈로그·검색에는 다 있다.
+            # 이름을 하나하나 늘어놓으면 120줄이 화면을 덮어 진짜 문제가 묻힌다
+            없음 += 1
             continue
         나쁜 = [c for c in ("stage_order", "gdd_from", "gdd_to")
                if any(_정수(r.get(c)) is None for r in 행들)]
@@ -252,6 +267,10 @@ def 단계연속(자료):
             문제.append(f"{이름}: gdd_target 이 정수가 아니다 {v.get('gdd_target')!r}")
         elif _정수(행들[-1]["gdd_to"]) != 목표:
             문제.append(f"{이름}: 마지막 gdd_to {행들[-1]['gdd_to']}, gdd_target {목표}")
+    # spec.온도() 와 같은 방식 — 빠진 이름 대신 덮은 넓이를 알린다
+    if 없음:
+        print(f"  · 생육단계가 없는 숙기 {없음}/{len(자료['crop_variants'])}"
+              f" — 농작업일정에 생육과정이 실린 작물만 단계가 나온다")
     return 문제
 
 
@@ -283,7 +302,11 @@ def 확정표대조(자료):
             문제.append(f"crops.{작물}.base_temp: CSV {r['base_temp']} ≠ 확정표 {기대}")
     남는것 = [n for n in 있는것 if n not in 온도표]
     if 남는것:
-        문제.append(f"crops: 확정표 §B-2 에 없는 작물이 CSV 에 있다 {남는것}")
+        # §B-2 에 없는 쪽이 이제 정상이다(spec.온도() 와 같은 판단). 원본에 있는 작물이
+        # 전부 들어오므로 확정표 16작물이 덮는 범위가 오히려 좁다.
+        # ⚠ 반대 방향 — "§B-2 에 있는데 CSV 에 없다" 는 위에서 여전히 문제로 잡는다.
+        #   값이 있는데 안 실린 것이므로 그건 진짜 사고다
+        print(f"  · §B-2 에 없어 base_temp 가 빈 작물 {len(남는것)}개 — 적산온도를 못 쌓는다")
     return 문제
 
 

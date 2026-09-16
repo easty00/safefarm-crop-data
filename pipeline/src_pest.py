@@ -23,7 +23,7 @@ from common import (  # noqa: E402
     COLS, OUT, RAW, TEMP_RANGE, clear_read_cache, dump_raw, read_doc, rows_out, set_out,
     tidy, to_num,
 )
-from crops import crops_in_line, is_main  # noqa: E402
+from crops import crops_in_line  # noqa: E402
 
 
 # 병해충 이름은 '○○병' '○○벌레' '○○나방' 처럼 끝이 정해져 있다
@@ -74,7 +74,7 @@ def from_pest():
                 lo, hi = to_num(m.group(1)), to_num(m.group(2) or m.group(1))
                 for 작물 in (작물들 or {""}):
                     rule.append({
-                        "작물": 작물, "본선": is_main(작물),
+                        "작물": 작물,
                         "재해종류": "병해충", "생육단계": 병해충명,
                         "지표": "평균기온", "부등호": "~",
                         "값": lo if lo == hi else f"{lo}~{hi}", "단위": "℃",

@@ -26,6 +26,7 @@
 
 import csv
 import io
+import re
 import sys
 from pathlib import Path
 
@@ -34,7 +35,8 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "feature"))
 
 import spec  # noqa: E402
-from crops import CROP_ALIAS, MAIN_CROPS, nospace  # noqa: E402
+from crops import CROP_ALIAS, nospace  # noqa: E402
+from common import era_edge, middle_day  # noqa: E402
 
 OUT = HERE / "out"
 스키마 = OUT / "스키마"
@@ -53,7 +55,16 @@ OUT = HERE / "out"
                         "guide_text"],
     "crop_disaster_rules.csv": ["crop_name", "hazard", "rule_kind", "stage_name",
                                 "metric", "op", "threshold_c", "duration_days", "severity"],
+    # 줄글. 정형 수치와 달리 '문서' 다 — 저쪽 chunker.py 가 잘라 임베딩한다
+    "crop_docs.csv": ["crop_name", "cultivation_type", "section", "topic",
+                      "body", "source_file", "source_loc"],
+    # 품종 카탈로그. 작물 필터 없이 2,599품종 전부 — 43작물이라 crops 와 FK 를 걸지 않는다.
+    # variety_no 는 농사로 cntntsNo. 재수집해도 안 바뀌는 자연키다
+    "varieties.csv": ["variety_no", "crop_group", "crop_name", "variety_group", "name",
+                      "maturity_raw", "maturity_type", "use", "zone", "bred_year", "breeder",
+                      "summary", "body", "source_file"],
 }
+
 
 # 근거 벌에 덧붙이는 칸. 저쪽으로 넘어가지 않는다
 덧칸 = {
@@ -62,6 +73,10 @@ OUT = HERE / "out"
     "crop_variants.csv": ["숙기원문", "품종수", "작형", "confirmed", "source"],
     "crop_stages.csv": ["작형", "시작중앙일", "종료중앙일", "source"],
     "crop_disaster_rules.csv": ["실린호", "원본수", "출처들", "조건원문", "source"],
+    # 줄글은 덧붙일 근거 칸이 없다 — source_file·source_loc 이 이미 계약 안에 있다
+    "crop_docs.csv": [],
+    # 근거 벌에만: 숙기를 어디서 읽었는지, 첨부가 무엇이었는지
+    "varieties.csv": ["숙기근거", "첨부파일", "source"],
 }
 
 
@@ -128,8 +143,17 @@ def gdd목표():
 # crops — 확정표 §B-2 가 그대로 들어간다
 # ─────────────────────────────────────────────────────────────────────
 
-def crops(온도표, 관리표):
-    """13행. base_temp·upper_temp 는 §B-2, difficulty 는 §H 채택값이다.
+def crops(온도표, 관리표, 작물들):
+    """원본에 나온 작물 전부. base_temp·upper_temp 는 §B-2, difficulty 는 §H 채택값이다.
+
+    ★ 2026-09-16 — **확정표에 줄이 있는 작물만 내보내던 것을 그만뒀다.**
+      예전에는 §B-2 의 16줄이 곧 crops.csv 였다. 전체 작물로 방침이 바뀌면서
+      **원본에 나온 작물이 전부 한 줄씩** 나온다. 확정표에 값이 없으면
+      base_temp·upper_temp 가 빈 채로 나간다 — 그 작물은 GDD 를 못 쌓는다는 뜻이고,
+      그게 사실이다. 억지로 채우지 않는다.
+
+    ⚠ 그래서 `confirmed` 가 빈 행이 대부분이 된다. 값이 없는 것과 확인 안 된 것을
+      가르려면 `source` 를 본다 — 확정표에서 온 행만 '확정표 §B-2' 라고 적힌다.
 
     ⚠ `difficulty` 는 확정표 어디에도 없다. 비워 둔다(저쪽 ORM 도 nullable).
       보도자료의 '재배하기 쉬운/보통/어려운' 은 §H 표를 풀어 쓰며 만든 표현이고
@@ -143,20 +167,135 @@ def crops(온도표, 관리표):
       하나로 뭉치면 어느 값이 확인된 것인지 알 수 없게 된다.
     """
     행들 = []
-    for 작물, v in 온도표.items():
-        if 작물 not in MAIN_CROPS:
-            print(f"  ⚠ 확정표에 있는데 등록표(crops.py)에 없는 작물: {작물}")
+    떠도는값 = sorted(set(온도표) - set(작물들))
+    if 떠도는값:
+        print(f"  ⚠ 확정표에 값이 있는데 원본에 안 나온 작물: {' · '.join(떠도는값)}")
+    for 작물 in sorted(set(작물들) | set(온도표)):
+        v = 온도표.get(작물)
         m = 관리표.get(작물)
+        출처 = [x for x in ("확정표 §B-2" if v else "", "§H" if m else "") if x]
         행들.append({
             "name": 작물,
-            "base_temp": f"{v['base_temp']:.1f}" if v["base_temp"] is not None else "",
-            "upper_temp": f"{v['upper_temp']:.1f}" if v["upper_temp"] is not None else "",
+            "base_temp": (f"{v['base_temp']:.1f}"
+                          if v and v["base_temp"] is not None else ""),
+            "upper_temp": (f"{v['upper_temp']:.1f}"
+                           if v and v["upper_temp"] is not None else ""),
             "difficulty": m["difficulty"] if m else "",
-            "confirmed": v["confirmed"],
+            "confirmed": v["confirmed"] if v else "",
             "difficulty_confirmed": m["confirmed"] if m else "",
-            "source": "확정표 §B-2" + (" + §H" if m else ""),
+            "source": " + ".join(출처) or "농사로 원본 (계산 상수 없음)",
         })
     return sorted(행들, key=lambda r: r["name"])
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 작형 — 확정표 §A 에 없는 작물은 첨부 작형표에서 만든다
+# ─────────────────────────────────────────────────────────────────────
+# §A 는 사람이 손으로 적는 표라 16작물뿐이다. 전체 작물로 바뀌면서 그 표만으로는
+# 나머지 140여 작물의 파종일·재배일수가 안 나온다. **자료에 있다** —
+# 농작업일정 첨부의 작형표가 씨뿌림·아주심기·수확기를 순(旬)으로 적어둔다.
+#
+#     가지 | 촉성재배 | 씨뿌림 6.상~6.하 | 아주심기 8.하~9.상 | 수확 10.상~이듬해 6.하
+#
+# ⚠ **§A 가 있으면 §A 가 이긴다.** 확정표가 정본이라는 규칙 그대로다.
+#   여기서 만든 줄은 §A 에 그 작물이 아예 없을 때만 쓴다.
+
+_순쌍 = re.compile(r"(?:(\d{1,2})\s*월\s*)?([상중하])순?")
+
+
+def _순들(글):
+    """'12월 상순~1월 하순' → [(12,'상'), (1,'하')]. 달이 생략되면 앞의 달을 잇는다.
+
+    ⚠ '2월 상~중순' 처럼 달을 한 번만 적는 꼴이 많다. 달을 기억해 두지 않으면
+      뒤쪽 순이 통째로 빠져 재배일수가 짧게 나온다.
+    """
+    out, 달 = [], None
+    for m in _순쌍.finditer(글 or ""):
+        if m.group(1):
+            달 = int(m.group(1))
+        if 달 is None:
+            continue
+        out.append((달, m.group(2)))
+    return out
+
+
+def _작형_일정(일정행들, 있는작물):
+    """작형표조차 없는 작물 — **생육과정 일정 그 자체**에서 파종일·재배일수를 만든다.
+
+    ⚠ 첨부 작형표는 38작물에만 있다. 그것만으로 끊으면 나머지 100여 작물이
+      crop_stages 에서 통째로 빠진다 — 일정은 있는데 단계가 안 나오는 꼴이다.
+
+    ⚠ 작형은 정보구분 꼬리에서 온다. 꼬리가 여럿이면 **행이 가장 많은 꼬리**를 쓴다.
+      첫 꼬리를 쓰면 시설 작형이 대표가 되는 작물이 생긴다.
+      꼬리가 없으면 작형을 비운다 — `_작형맞나` 가 꼬리 없는 행만 받게 된다.
+    """
+    묶 = {}
+    for r in 일정행들:
+        if not (r.get("정보구분") or "").startswith("생육과정"):
+            continue
+        작물 = 표준작물(r.get("작물"))
+        if not 작물 or 작물 in 있는작물:
+            continue
+        꼬리 = (r.get("정보구분") or "").split(" - ", 1)
+        묶.setdefault((작물, 꼬리[1].strip() if len(꼬리) > 1 else ""), []).append(r)
+
+    큰것 = {}
+    for (작물, 작형), 행 in 묶.items():
+        앞 = 큰것.get(작물)
+        if 앞 is None or len(행) > len(앞[1]):
+            큰것[작물] = (작형, 행)
+
+    out = []
+    for 작물, (작형, 행) in 큰것.items():
+        시작들 = [r.get("시작중앙일") for r in 행
+                 if any(w in (r.get("작업명") or "") for w in 시작낱말)
+                 and r.get("시작중앙일")]
+        날들 = [r.get("시작중앙일") for r in 행 if r.get("시작중앙일")]
+        파종일 = min(시작들) if 시작들 else (min(날들) if 날들 else "")
+        if not 파종일:
+            continue
+        끝들 = [_상대일(r.get("종료중앙일") or r.get("시작중앙일"), 파종일) for r in 행]
+        끝들 = [d for d in 끝들 if d != 999]
+        out.append({
+            "작물": 작물, "작물키": f"{작물}_{작형 or '기본'}", "작형": 작형,
+            "지역": "", "관측소": [],
+            "파종일": 파종일, "파종방법": "", "파종시작": "", "파종끝": "",
+            "일수": max(끝들) if 끝들 else "",
+            "출처": "농작업일정 생육과정 일정에서 역산",
+        })
+    return out
+
+
+def _작형_자료(일정행들, 있는작물):
+    """첨부 작형표 행 → §A 와 같은 꼴. 확정표에 없는 작물만 만든다."""
+    out, 본것 = [], set()
+    for r in 일정행들:
+        작물 = 표준작물(r.get("작물"))
+        if not 작물 or 작물 in 있는작물:
+            continue
+        심기 = (r.get("씨뿌림") or "").strip() or (r.get("아주심기") or "").strip()
+        거두기 = (r.get("수확기") or "").strip() or (r.get("성출하기") or "").strip()
+        심기순, 거두기순 = _순들(심기), _순들(거두기)
+        if not 심기순 or not 거두기순:
+            continue
+        작형 = re.sub(r"\s+", " ", (r.get("작형") or "").strip()) or "기본"
+        키 = f"{작물}_{작형}"
+        if 키 in 본것:
+            continue                      # 같은 작형이 호마다 되풀이된다. 첫 줄만
+        본것.add(키)
+        파종일 = middle_day(*심기순[0])
+        끝 = era_edge(*거두기순[-1], last=True)
+        out.append({
+            "작물": 작물, "작물키": 키, "작형": 작형,
+            "지역": "", "관측소": [],
+            "파종일": 파종일,
+            "파종방법": "씨뿌림" if (r.get("씨뿌림") or "").strip() else "아주심기",
+            "파종시작": era_edge(*심기순[0]),
+            "파종끝": era_edge(*심기순[-1], last=True),
+            "일수": _사이일수(파종일, 끝),
+            "출처": f"농작업일정 작형표 {r.get('출처파일', '')}",
+        })
+    return out
 
 # ─────────────────────────────────────────────────────────────────────
 # crop_variants — 숙기 접기 + 재배일수
@@ -176,7 +315,7 @@ def _대표작형(작형표):
     return 대표
 
 
-def crop_variants(온도표, 작형표, 접기, 수박표, 분할작물, 품종들):
+def crop_variants(작물들, 작형표, 접기, 수박표, 분할작물, 품종들):
     """작물 × 숙기. gdd_target 은 비운다(맨 위 ⚠).
 
     ★ **몇 갈래로 나눌지는 확정표가 정한다. 품종정보가 아니다.**
@@ -206,7 +345,7 @@ def crop_variants(온도표, 작형표, 접기, 수박표, 분할작물, 품종�
         칸["수"] += 1
         칸["원문"].add(숙기)
 
-    for 작물 in sorted(온도표):
+    for 작물 in sorted(작물들):
         기본 = 대표.get(작물)
         일수 = int(기본["일수"]) if 기본 and 기본["일수"] else ""
         작형이름 = (기본 or {}).get("작형", "")
@@ -320,6 +459,68 @@ def _안내모으기(본문행들):
     return 묶
 
 
+# 줄글로 넘길 구분. 품종요약서·품종주요특성은 카탈로그라 뺀다 —
+# 넣으면 6,616행이 재배법 1,231행을 덮어 검색이 카탈로그로 쏠린다
+문서구분 = ("재배법", "기상재해대책", "생리적특성")
+
+# 병합 후 이 길이 미만이면 버린다. 제목만 남은 껍데기다
+최소길이 = 40
+
+
+def crop_docs(본문행들):
+    """
+    mid_text 파편을 '작물 × 작형 × 구분 × 절' 로 묶어 문서 행으로 만든다.
+
+    _안내찾기 와 나누는 이유:
+        저쪽은 stage_name 에 맞는 덩이 **하나** 를 고른다(1:1). 짝이 없는
+        머리글(관리·물주기·병해충 방제)은 버려진다.
+        여기는 전부 넘긴다(1:N). 고를 일이 없으니 어휘 불일치 문제도 없다.
+
+    자르지 않는 이유:
+        청킹은 Safe-farm 의 app/knowledge/chunker.py 가 CHUNK_SIZE=480 토큰으로
+        한다. 양쪽이 각자 자르면 경계가 갈려 같은 기준으로 비교할 수 없게 된다.
+        그래서 5,663자짜리도 그대로 넘긴다 — `최대=400` 을 여기 두지 않는다.
+    """
+    묶 = {}
+    for r in 본문행들:
+        if r.get("구분") not in 문서구분:
+            continue
+        작물 = 표준작물(r.get("작물"))
+        글 = (r.get("본문") or "").strip()
+        if not 작물 or not 글:
+            continue
+
+        # 원문이 작물명에 작형을 섞어 둔다: '고추(보통재배)'
+        원작물 = r.get("작물") or ""
+        작형 = 원작물[원작물.find("(") + 1 : 원작물.rfind(")")] if "(" in 원작물 else ""
+
+        키 = (작물, 작형, r["구분"], r.get("절", ""))
+        칸 = 묶.setdefault(키, {"조각": [], "topic": "",
+                               "file": r.get("출처파일", ""), "loc": r.get("위치", "")})
+
+        # 머리글 판정은 _안내모으기 와 같은 규칙을 쓴다 — 두 벌로 두면 갈린다
+        if not 칸["topic"] and ":" not in 글 and len(글) <= 14:
+            칸["topic"] = 글
+        else:
+            칸["조각"].append(글)
+
+    행들 = []
+    for (작물, 작형, 구분, 절), v in 묶.items():
+        body = " / ".join(v["조각"])
+        if len(body) < 최소길이:
+            continue
+        행들.append({
+            "crop_name": 작물,
+            "cultivation_type": 작형,
+            "section": 구분,
+            "topic": v["topic"] or 절 or 구분,
+            "body": body,
+            "source_file": v["file"],
+            "source_loc": v["loc"],
+        })
+    return 행들
+
+
 def _안내찾기(안내, 작물, 단계이름, 최대=400):
     """단계 이름에 맞는 머리글을 찾아 그 아래 줄들을 잇는다. 못 찾으면 빈 문자열."""
     후보 = 안내.get(작물) or []
@@ -430,7 +631,7 @@ def crop_stages(일정행들, variants, 작형표, 안내=None):
         if not (r.get("정보구분") or "").startswith("생육과정"):
             continue
         작물 = 표준작물(r.get("작물"))
-        if 작물 not in MAIN_CROPS:
+        if not 작물:
             continue
         if not _작형맞나(r.get("정보구분"), (확정.get(작물) or {}).get("작형")):
             continue
@@ -449,7 +650,7 @@ def crop_stages(일정행들, variants, 작형표, 안내=None):
         if not (r.get("정보구분") or "").startswith("생육과정"):
             continue
         작물 = 표준작물(r.get("작물"))
-        if 작물 not in MAIN_CROPS or (r.get("작물") or "") != 문서.get(작물):
+        if not 작물 or (r.get("작물") or "") != 문서.get(작물):
             continue
         if not _작형맞나(r.get("정보구분"), (확정.get(작물) or {}).get("작형")):
             continue
@@ -704,6 +905,91 @@ def crop_disaster_rules(규칙행들, crops행들):
     return 행들, 제외셈
 
 
+# ─────────────────────────────────────────────────────────────────────
+# varieties — 품종 카탈로그. 작물 필터 없음
+# ─────────────────────────────────────────────────────────────────────
+
+본문폴더 = HERE.parent / "원본" / "품종정보" / "본문"
+
+# 첨부를 글자로 펼 때 섞여 들어오는 것. 값이 아니므로 지워도 잃을 것이 없다.
+# ⚠ feature/clean_text.py 는 HTML 엔티티·가짜 한자·SPAN 만 안다. 이건 다른 종류다
+_찌꺼기 = re.compile(
+    r"^\s*(===== p\.\d+ =====|- \d+ -|그림입니다\.?|사각형입니다\.?|원본 그림의 (이름|크기): .*)\s*$"
+)
+
+
+def clean_body(text):
+    """첨부 본문에서 사람이 읽을 줄만 남긴다. 자르지 않는다 — 청킹은 저쪽 chunker.py 몫이다.
+
+    버리는 것 셋:
+      찌꺼기      쪽 표시·그림 자리표시자. _찌꺼기
+      표 조각     6자 이하 줄. 표를 펴면 칸 하나가 한 줄이 된다 ('93.8' '수미' '편타원')
+                 문장은 6자 안에 끝나지 않으므로 잃는 것이 없다
+      빈 줄
+
+    이어 붙이는 것: PDF 는 40자쯤에서 줄을 강제로 바꾼다 ('수량 감소가 크' / '다.').
+    앞 줄이 문장 끝(다. 음. 함. 임. 됨.)이 아니면 다음 줄을 공백 없이 잇는다
+    """
+    줄들 = []
+    for 줄 in text.splitlines():
+        s = 줄.strip()
+        if not s or _찌꺼기.match(s) or len(s) <= 6:
+            continue
+        if 줄들 and not re.search(r"[.。]$|[다음함임됨]\s*$", 줄들[-1]):
+            줄들[-1] += s          # 강제 줄바꿈 복원
+        else:
+            줄들.append(s)
+    return "\n".join(줄들)
+
+
+def varieties(품종들, 접기):
+    """out/원본별/품종정보/varieties.csv + 본문 txt → 계약 행.
+
+    ⚠ 작물을 거르지 않는다. 43작물 2,599품종 전부다.
+    ⚠ maturity_type 은 접기 규칙에 있는 말만 채운다. 없으면 빈 칸 — 저쪽이 crop_variants 를
+      찾을 때 "그 작물의 유일한 행" 규칙으로 푼다. 여기서 MID 를 넣으면 품종 속성과
+      crop_variants 규칙이 섞인다
+    """
+    행들 = []
+    for r in 품종들:
+        # ⚠ '논벼 > 일반벼' — **1단이 작물, 2단이 세부 분류**다. 반대로 읽으면
+        #   crop_name 에 '일반벼' '스프레이' 가 앉아 crops 와 영영 안 이어진다.
+        #   세부 분류가 없는 작물도 많다('고구마') — 2,599 중 1,741행이 그렇다. 버리지 않는다
+        작물, _, 세부 = (r.get("작물원문") or "").partition(">")
+        작물 = 작물.strip()
+        번호 = (r.get("cntntsNo") or "").strip()
+        if not 번호 or not 작물:
+            continue
+        # '논벼' → '벼'. 예외표에 없으면 제 이름 그대로 (crops.py 는 더 이상 거르지 않는다)
+        표준 = CROP_ALIAS.get(nospace(작물), 작물)
+        숙기 = (r.get("숙기") or "").strip()
+        본문 = ""
+        후보 = list(본문폴더.glob(f"*/*/{번호}_*.txt"))
+        if 후보:
+            본문 = clean_body(후보[0].read_text(encoding="utf-8", errors="replace"))
+        행들.append({
+            "variety_no": 번호,
+            "crop_group": 후보[0].parent.parent.name if 후보 else "",   # 본문 경로의 '식량작물'·'채소'
+            "crop_name": 표준,
+            "variety_group": 세부.strip(),      # '일반벼' '장류용콩'. 없으면 빈 칸
+            "name": (r.get("품종명") or "").strip(),
+            "maturity_raw": 숙기,
+            "maturity_type": 접기.get(숙기, "") if 숙기 else "",
+            "use": (r.get("용도") or "").strip(),
+            "zone": (r.get("지대") or "").strip(),
+            "bred_year": (r.get("육성년도") or "").strip(),
+            "breeder": (r.get("육성기관") or "").strip(),
+            "summary": (r.get("주요특성") or "").strip(),
+            "body": 본문,
+            "source_file": 후보[0].name if 후보 else "",
+            # 근거 벌
+            "숙기근거": r.get("숙기근거") or "",
+            "첨부파일": r.get("첨부파일") or "",
+            "source": "품종정보 varieties.csv" + (" + 첨부 본문" if 본문 else ""),
+        })
+    return 행들
+
+
 def main():
     print("build — 확정표 + 중간 CSV → 스키마 3종\n")
     try:
@@ -728,8 +1014,24 @@ def main():
     if not 일정:
         print(f"  ⚠ {일정경로.name} 이 없습니다. crop_stages 가 빕니다")
 
-    c = crops(온도표, 관리표)
-    v = crop_variants(온도표, 작형표, 접기, 수박표, 분할작물, 품종들)
+    # ★ 작물 목록은 **자료가 정한다.** 예전에는 확정표 §B-2 의 16줄이 곧 작물 목록이었다.
+    #   등록표(crops.py)가 화이트리스트를 그만두면서 여기도 같이 풀었다.
+    작물들 = {표준작물(r.get("작물")) for r in 일정} - {""}
+    if not 작물들:
+        작물들 = set(온도표)
+
+    # 확정표 §A 에 없는 작물의 작형·파종일·재배일수는 첨부 작형표에서 만든다
+    보탠작형 = _작형_자료(일정, {r["작물"] for r in 작형표})
+    작형표 = 작형표 + 보탠작형
+    # 작형표조차 없는 작물은 일정 자체에서 역산한다. 세 층의 차례가 곧 미더움의 차례다
+    역산작형 = _작형_일정(일정, {r["작물"] for r in 작형표})
+    작형표 = 작형표 + 역산작형
+    print(f"  · 작형 — 확정표 §A {len(작형표) - len(보탠작형) - len(역산작형)}행"
+          f" + 첨부 작형표 {len(보탠작형)}행 + 일정 역산 {len(역산작형)}행"
+          f"   ({len({r['작물'] for r in 작형표})}작물)")
+
+    c = crops(온도표, 관리표, 작물들)
+    v = crop_variants(작물들, 작형표, 접기, 수박표, 분할작물, 품종들)
     # 역산값을 얹는다. crop_variants 안에서 채우지 않는 이유 —
     # gdd_target 은 작물 단위라 숙기별로 다르지 않은데, 그 함수는 숙기마다
     # 분기가 셋이라(수박 §D-3 · 3분할 · MID 한 행) 같은 줄을 세 번 쓰게 된다
@@ -759,6 +1061,9 @@ def main():
     내기("crop_variants.csv", v)
     내기("crop_stages.csv", s)
     내기("crop_disaster_rules.csv", d)
+    내기("crop_docs.csv", crop_docs(본문))
+    # 품종들·접기 는 이 함수 위에서 이미 읽어 둔 값이다 (crop_variants 가 쓴다)
+    내기("varieties.csv", varieties(품종들, 접기))
 
     if 제외셈:
         print("\n  · 경보로 안 넣은 규칙")
