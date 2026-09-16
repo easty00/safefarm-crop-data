@@ -84,6 +84,40 @@ def 표준작물(이름):
 
 
 # ─────────────────────────────────────────────────────────────────────
+# 역산 결과 — gdd_backfill.py 가 만든 out/gdd.csv
+# ─────────────────────────────────────────────────────────────────────
+
+def gdd목표():
+    """{작물: {gdd_target, 편차, 근거}}. out/gdd.csv 를 작물 단위로 접는다.
+
+    ⚠ 한 작물에 여러 줄이 있다(작형·관측소). **평균을 쓴다.**
+      편차가 크면 근거 벌에 남겨 나중에 볼 수 있게 한다 —
+      벼 19% · 무 28% · 양파 39% 가 그렇다(확인필요.md).
+
+    ⚠ 파일이 없으면 **조용히 빈 값을 내지 않고 알린다.** gdd_target 이 비면
+      저쪽 적재가 NOT NULL 로 깨지는데, 원인이 "역산을 안 돌렸다" 인지
+      "역산이 실패했다" 인지 구분이 안 된다.
+    """
+    경로 = OUT / "gdd.csv"
+    if not 경로.exists():
+        print(f"  ⚠ {경로.name} 이 없습니다 — python pipeline/gdd_backfill.py 를 먼저 돌리세요")
+        return {}
+
+    묶음 = {}
+    for r in 읽기(경로):
+        묶음.setdefault(r["작물"], []).append((r["관측소"], int(r["gdd"])))
+
+    out = {}
+    for 작물, 것들 in 묶음.items():
+        값 = [g for _, g in 것들]
+        out[작물] = {
+            "gdd_target": round(sum(값) / len(값)),
+            "편차": round((max(값) - min(값)) / max(값) * 100) if len(값) > 1 else 0,
+            "근거": " · ".join(f"{s} {g}" for s, g in 것들),
+        }
+    return out
+
+# ─────────────────────────────────────────────────────────────────────
 # crops — 확정표 §B-2 가 그대로 들어간다
 # ─────────────────────────────────────────────────────────────────────
 
@@ -305,6 +339,24 @@ def _상대일(중앙일, 기준):
 # 재배가 시작되는 단계. 이것의 날짜가 그 작물의 0일이다
 시작낱말 = ("씨뿌림", "씨뿌릴", "파종", "모기르기", "모 기르기", "온상설치", "육묘", "발아")
 
+def _기간안(중앙일, 파종일, 일수, 여유=20):
+    """단계 시작일이 그 작형의 재배 기간 안인가.
+
+    ⚠ **작업명으로는 작형을 못 가른다.** 봄배추 '결구기'(4월)와 가을배추
+      '아주심기, 웃거름'(8월)은 이름이 달라 아래 '본이름' 검사를 둘 다 통과한다.
+      실제로 배추가 7단계가 됐다 — 봄 5단계 + 가을 2단계가 한 줄기로 붙었다.
+      §A 에 파종일이 생겼으니(2026-09-16) 날짜로 가른다.
+
+    ⚠ _상대일 은 **음수를 한 해 뒤로 감는다**(월동작물 때문에). 그래서 파종 전
+      20일은 0~20 이 아니라 352~372 로 온다. 양쪽을 다 받아야 첫 단계가 안 잘린다.
+
+    여유를 두는 까닭: 농작업일정은 순(旬) 단위라 중앙일이 확정표 파종일과
+    최대 한 순(10일) 어긋난다. 앞뒤로 20일 열어 첫·끝 단계를 살린다.
+    """
+    d = _상대일(중앙일, 파종일)
+    if d is None:
+        return False
+    return d <= 일수 + 여유 or d >= 12 * 31 - 여유
 
 def _작형맞나(정보구분, 확정작형):
     """`정보구분` 뒤에 붙은 작형이 확정표 §A 가 고른 작형인가.
@@ -338,7 +390,15 @@ def crop_stages(일정행들, variants, 작형표, 안내=None):
     #    벼는 기계이앙(30697)과 직파(30698)가 따로고, 섞으면 '모내기때' 와 '씨뿌릴때' 가
     #    한 줄기에 같이 들어와 여덟 단계가 된다. 실제로 그랬다.
     #    괄호 없는 이름(= 확정표 §A 의 첫 작형)을 고른다.
-    확정작형 = {x["작물"]: x["작형"] for x in reversed(작형표)}
+    
+    # 작물 하나에 작형이 여럿이다(배추 봄·가을·고랭지). 첫 줄로 고정하지 않는다 —
+    # raw XML 의 작형 이름이 첨부 표와 어긋나는 것이 있어서, §A 첫 줄을 쓰면
+    # 단계가 두 개밖에 안 잡힌다(배추 '봄배추' 가 실은 시설재배 시기다).
+    # 아래 ②에서 작형마다 돌려보고 **가장 많이 잡히는 것**을 쓴다.
+    후보 = {}
+    for x in 작형표:
+        후보.setdefault(x["작물"], []).append(x)
+    확정 = {c: v[0] for c, v in 후보.items()}   # _작형맞나 용 대표
     문서 = {}
     for r in 일정행들:
         if not (r.get("정보구분") or "").startswith("생육과정"):
@@ -346,7 +406,7 @@ def crop_stages(일정행들, variants, 작형표, 안내=None):
         작물 = 표준작물(r.get("작물"))
         if 작물 not in MAIN_CROPS:
             continue
-        if not _작형맞나(r.get("정보구분"), 확정작형.get(작물)):
+        if not _작형맞나(r.get("정보구분"), (확정.get(작물) or {}).get("작형")):
             continue
         원이름 = (r.get("작물") or "")
         고름 = 문서.get(작물)
@@ -365,20 +425,30 @@ def crop_stages(일정행들, variants, 작형표, 안내=None):
         작물 = 표준작물(r.get("작물"))
         if 작물 not in MAIN_CROPS or (r.get("작물") or "") != 문서.get(작물):
             continue
-        if not _작형맞나(r.get("정보구분"), 확정작형.get(작물)):
+        if not _작형맞나(r.get("정보구분"), (확정.get(작물) or {}).get("작형")):
             continue
         이름 = (r.get("작업명") or "").strip()
-        키 = 덩이별.setdefault(작물, {"행": [], "본이름": set(), "작형": ""})
-        if "▶" in 이름:
-            if not 키["작형"]:
-                키["작형"] = 이름.replace("▶", "").strip()
-            continue
-        if not any(w in 이름 for w in 단계낱말):
-            continue                      # '김매기, 물주기' 같은 할 일은 단계가 아니다
-        if 이름 in 키["본이름"]:
-            continue                      # 같은 작업명의 두 번째 = 다음 작형
-        키["본이름"].add(이름)
-        키["행"].append(r)
+        if "▶" in 이름 or not any(w in 이름 for w in 단계낱말):
+            continue                      # 표시행 · '김매기, 물주기' 같은 할 일
+        # 작형마다 따로 모은다. 어느 것을 쓸지는 다 모은 뒤에 고른다
+        for a in 후보.get(작물, []):
+            if not _기간안(r.get("시작중앙일"), a["파종일"], a["일수"]):
+                continue
+            칸 = 덩이별.setdefault(작물, {}).setdefault(
+                a["작물키"], {"행": [], "본이름": set(), "작형": a["작형"]}
+            )
+            if 이름 in 칸["본이름"]:
+                continue                  # 같은 작업명의 두 번째 = 다른 해의 같은 작업
+            칸["본이름"].add(이름)
+            칸["행"].append(r)
+
+    # ③ 작물마다 **단계가 가장 많이 잡힌 작형**을 쓴다.
+    #    같으면 §A 에서 앞선 작형이 이긴다 — 주작형을 앞에 적어 두면 그게 뽑힌다
+    차례 = {x["작물키"]: i for i, x in enumerate(작형표)}
+    덩이별 = {
+        작물: max(v.values(), key=lambda k: (len(k["행"]), -차례.get(k.get("작물키", ""), 0)))
+        for 작물, v in 덩이별.items()
+    }
 
     숙기별 = {}
     for v in variants:
@@ -417,6 +487,83 @@ def crop_stages(일정행들, variants, 작형표, 안내=None):
                 })
     return 행들
 
+def 구간채우기(단계행들, variants, 작형표, 온도표):
+    """crop_stages 의 gdd_from·gdd_to 를 채운다.
+
+    단계 사이 기간을 평년 기온으로 적산해 **비중**을 내고, 그 비중대로
+    gdd_target 을 나눈다.
+
+    ⚠ 적산값을 그대로 쓰지 않는다. stage_problems 가 '마지막 gdd_to ==
+      gdd_target' 을 요구하는데, 단계 시작일이 파종일과 어긋나서(배추는
+      아주심기 08-25 인데 첫 단계가 08-05) 총합이 안 맞는다.
+
+    ⚠ 첫 단계 gdd_from 은 0 으로 못박는다. 같은 까닭이다.
+    """
+    from gdd_backfill import 평년읽기, 전국평균, 적산, 전국   # noqa: PLC0415
+
+    표, 차례 = 평년읽기()
+    표[전국] = 전국평균(표, 차례)
+    # 역산이 안 된 작물은 gdd_target 이 빈 문자열이다. 키에서 아예 빼서
+    # 아래 `if not 목표값` 이 건너뛰게 한다 — int('') 는 터진다
+    목표 = {}
+    for v in variants:
+        try:
+            목표[v["crop_name"]] = int(v["gdd_target"])
+        except (TypeError, ValueError):
+            pass
+    관측 = {x["작물"]: (x["관측소"] or [전국])[0] for x in 작형표}
+
+    묶음 = {}
+    for r in 단계행들:
+        묶음.setdefault((r["crop_name"], r["maturity_type"]), []).append(r)
+
+    for (작물, _숙기), 것들 in 묶음.items():
+        목표값 = 목표.get(작물)
+        온도 = 온도표.get(작물)
+        if not 목표값 or not 온도:
+            continue
+        것들.sort(key=lambda r: int(r["stage_order"]))
+        일별 = 표[관측.get(작물, 전국)]
+
+        # 단계 i 의 길이 = 그 단계 시작 ~ 다음 단계 시작. 마지막은 종료중앙일까지
+        몫 = []
+        for i, r in enumerate(것들):
+            시작 = r.get("시작중앙일") or ""
+            끝 = 것들[i + 1].get("시작중앙일") if i + 1 < len(것들) else r.get("종료중앙일")
+            일 = _사이일수(시작, 끝)
+            몫.append(적산(일별, 차례, 시작, 일, 온도["base_temp"], 온도["upper_temp"])
+                     if 시작 and 일 > 0 else 0.0)
+
+        전체 = sum(몫)
+        if 전체 <= 0:
+            continue
+        누적 = 0.0
+        for i, r in enumerate(것들):
+            r["gdd_from"] = round(목표값 * 누적 / 전체)
+            누적 += 몫[i]
+            r["gdd_to"] = round(목표값 * 누적 / 전체)
+        것들[0]["gdd_from"] = 0
+        것들[-1]["gdd_to"] = 목표값
+    # 폭이 0인 단계는 버린다. 같은 날짜에 두 작업이 적힌 것이라 GDD 로는
+    # 구분되지 않는다 — 배추의 '어린 모 시기' 와 '씨뿌림' 이 둘 다 08-05 다.
+    # 저쪽 ck_crop_stages_gdd_range 가 gdd_from < gdd_to 를 요구한다.
+    남길 = [r for r in 단계행들 if r.get("gdd_from") != r.get("gdd_to")]
+
+    # stage_order 를 1부터 다시 매긴다. 구멍이 나면 stage_problems 가
+    # '1부터 연속이 아니다' 로 잡는다
+    다시 = {}
+    for r in 남길:
+        다시.setdefault((r["crop_name"], r["maturity_type"]), []).append(r)
+    for 것들 in 다시.values():
+        것들.sort(key=lambda r: int(r["stage_order"]))
+        for i, r in enumerate(것들, 1):
+            r["stage_order"] = i
+    return 남길
+
+def _사이일수(a, b):
+    """'08-05' 와 '10-25' 사이 날수. 해를 넘겨도 센다(_상대일 이 감아 준다)."""
+    d = _상대일(b, a)
+    return d if d is not None else 0
 
 # ─────────────────────────────────────────────────────────────────────
 
@@ -556,8 +703,23 @@ def main():
 
     c = crops(온도표)
     v = crop_variants(온도표, 작형표, 접기, 수박표, 분할작물, 품종들)
+    # 역산값을 얹는다. crop_variants 안에서 채우지 않는 이유 —
+    # gdd_target 은 작물 단위라 숙기별로 다르지 않은데, 그 함수는 숙기마다
+    # 분기가 셋이라(수박 §D-3 · 3분할 · MID 한 행) 같은 줄을 세 번 쓰게 된다
+    목표 = gdd목표()
+    for r in v:
+        t = 목표.get(r["crop_name"])
+        if not t:
+            continue
+        r["gdd_target"] = t["gdd_target"]
+        꼬리 = f" + 역산 {t['근거']}"
+        if t["편차"] >= 15:
+            꼬리 += f" (편차 {t['편차']}% — 확인필요.md)"
+        r["source"] += 꼬리
+        
     본문 = 읽기(OUT / "mid_text.csv") if (OUT / "mid_text.csv").exists() else []
     s = crop_stages(일정, v, 작형표, _안내모으기(본문))
+    s = 구간채우기(s, v, 작형표, 온도표)
 
     규칙경로 = OUT / "mid_rule.csv"
     규칙 = 읽기(규칙경로) if 규칙경로.exists() else []
