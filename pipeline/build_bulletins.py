@@ -29,7 +29,8 @@ from crops import crops_in_line  # noqa: E402
                         "pest_name", "target_crops", "source_file"],
     "pest_bulletins.csv": ["issue_year", "issue_no", "ordinal", "period_from", "period_to",
                            "crop_group", "pest_name", "level", "crop_names", "body", "source_file"],
-    # disaster_bulletins 는 그 교안에서 더한다
+    "disaster_bulletins.csv": ["issue_year", "issue_month", "ordinal", "hazard", "crop_names",
+                               "phase", "body", "source_file"],
 }
 
 # 첨부를 글자로 펼 때 섞이는 것. 값이 아니다
@@ -151,12 +152,26 @@ def pest_alerts():
     src = HERE / "out" / "pest_alert.csv"
     with src.open(encoding="utf-8-sig", newline="") as fh:
         rows = list(csv.DictReader(fh))
-    return [{
+    행들 = [{
         "issue_year": r["연도"], "issue_no": r["호수"],
         "crop_group": r["작물군"], "level": r["등급"], "kind": r["구분"],
         "pest_name": r["병해충명"], "target_crops": r["대상작물"],
         "source_file": r["출처파일"],
     } for r in rows]
+
+    # 같은 경보가 요약과 본문에 두 번 실린다. 저쪽 자연키가 겹쳐
+    # ON CONFLICT DO UPDATE 가 "한 문장에서 같은 행을 두 번 건드릴 수 없다" 로 죽는다.
+    #
+    # ⚠ 뒤엣것으로 덮지 않는다. 한쪽에만 대상작물이 붙어 있어서다 —
+    #   '2023 9호 멸강나방' 은 본문에 '옥수수', 요약에 빈 칸이다. 채워진 쪽을 남긴다
+    접음 = {}
+    for r in 행들:
+        열쇠 = (r["issue_year"], r["issue_no"], r["crop_group"],
+                r["level"], r["kind"], r["pest_name"])
+        앞 = 접음.get(열쇠)
+        if 앞 is None or (not 앞["target_crops"].strip() and r["target_crops"].strip()):
+            접음[열쇠] = r
+    return list(접음.values())
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -269,11 +284,86 @@ def pest_bulletins():
     return 행들
 
 
+# ─────────────────────────────────────────────────────────────────────
+# disaster_bulletins — 재해예방 월간회보의 【대책】 블록. 예측보고는 읽지 않는다 (문장이 없다)
+# ─────────────────────────────────────────────────────────────────────
+
+_회보호수 = re.compile(r"제(\d+)호")
+_Ⅱ장 = re.compile(r"^\s*Ⅱ\.\s*농작물")
+_Ⅲ장 = re.compile(r"^\s*Ⅲ\.")
+_재해절 = re.compile(r"^\s*\d+\.\s*(.{1,40}?(대비|대책|관리요령|기술지도).*)$")
+_작물소절 = re.compile(r"^\s*\d+\)\s*(.{1,20})$")
+_참고제목 = re.compile(r"^\s*(\S.{2,30}?(피해|대비).{0,12}대책)\s*$")
+_블록 = re.compile(r"^\s*【\s*(.+?)\s*】\s*$")
+_대책블록 = re.compile(r"대책|발생\s*전|발생\s*시|종료\s*후|발생\s*후")
+_본문줄 = re.compile(r"^\s*[○◦•\-–※]")
+_재해낱말 = ("강풍", "우박", "황사", "일조부족", "집중호우", "호우", "태풍", "가뭄", "폭염", "고온", "저온", "냉해",
+             "동해", "서리", "한파", "대설", "폭설", "침수", "장마", "이상기상")
+
+
+def _재해(제목):
+    """'2. 우박 대비 작물별 관리요령' → '우박'. 낱말 표에 없으면 제목 앞 열 글자."""
+    for w in _재해낱말:
+        if w in 제목:
+            return w
+    return "".join(제목.split())[:10]
+
+
+def disaster_bulletins():
+    행들 = []
+    for path in sorted((원본 / "재해예방정보" / "본문").glob("*월간회보*.txt")):
+        줄들 = 읽기(path)
+        year = int(path.name[:4])
+        m = _회보호수.search(path.name)
+        if not m:
+            print(f"  ⚠ 호수 못 읽음: {path.name}"); continue
+        month = int(m.group(1))
+
+        읽는중, hazard, crop_hint, block, body, ordinal = False, "", "", None, [], 0
+
+        def 닫기():
+            nonlocal block, body, ordinal
+            if block and body:
+                텍스트 = "\n".join(body)
+                if len(텍스트) >= 40:
+                    ordinal += 1
+                    행들.append({
+                        "issue_year": year, "issue_month": month, "ordinal": ordinal,
+                        "hazard": hazard, "crop_names": ",".join(sorted(crops_in_line(crop_hint))),
+                        "phase": "".join(block.split()), "body": 텍스트, "source_file": path.name,
+                    })
+            block, body = None, []
+
+        for s in 줄들:
+            if _Ⅱ장.match(s):
+                읽는중 = True; continue
+            if 읽는중 and _Ⅲ장.match(s):
+                break
+            if not 읽는중 or _잡음.match(s):
+                continue
+            g = _재해절.match(s)
+            if g:
+                닫기(); hazard = _재해(g.group(1)); crop_hint = ""; continue
+            c = _작물소절.match(s) or _참고제목.match(s)
+            if c:
+                닫기(); crop_hint = c.group(1); continue
+            b = _블록.match(s)
+            if b:
+                닫기()
+                block = b.group(1) if _대책블록.search(b.group(1)) else None   # 【최근 10년 특보 현황】 같은 표 제목은 블록이 아니다
+                continue
+            if block and s.strip() and (_본문줄.match(s) or len(s.strip()) >= 15):
+                body.append(s.strip())
+        닫기()
+    return 행들
+
+
 STEPS = {
     "weekly": ("weekly_notes.csv", weekly),
     "pest_alerts": ("pest_alerts.csv", pest_alerts),
     "pest": ("pest_bulletins.csv", pest_bulletins),
 }
+STEPS["disaster"] = ("disaster_bulletins.csv", disaster_bulletins)
 
 
 def main():
