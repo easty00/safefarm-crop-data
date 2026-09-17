@@ -116,7 +116,17 @@ def _절나누기(줄들):
 
 # 재배 지침이 아닌 절. 그해 기상 통계라 3년치가 섞이면 오히려 틀린 답이 나온다
 # ('합계' 74행 — "시도별 누적 강수량('23.1.1.~'23.10.16.)" 꼴)
-버릴주제 = frozenset({"합계"})
+#
+# ⚠ **이름을 하나씩 적는다. 정규식으로 긁지 말 것.** topic 에 '기상' 이 든 186건 중
+#    34건은 지침이다('여름철 기상재해 관리요령' 18 · '기상재해 대비 사전관리' 11 …).
+#    한 줄로 지우면 재해 대책을 같이 날린다 — 재해예방정보에서 예측보고를 버릴 때
+#    월간회보를 같이 버리지 않으려고 파일 이름으로 갈랐던 것과 같은 이유다
+버릴주제 = frozenset({
+    "합계",
+    "기상 상황 및 전망",       # 133건. 기온·강수량·일조시간 통계뿐
+    "기상 정보",               # 14건. 위와 같은 내용, 호에 따라 제목만 다르다
+    "저수율 및 강수량 현황",    # 5건. 시도별 누적 강수량 표
+})
 def weekly():
     행들 = []
     for path in sorted((원본 / "주간농사정보" / "본문").glob("*/*.txt")):
@@ -285,76 +295,166 @@ def pest_bulletins():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# disaster_bulletins — 재해예방 월간회보의 【대책】 블록. 예측보고는 읽지 않는다 (문장이 없다)
+# disaster_bulletins — 재해예방 월간회보의 대책 블록. 예측보고는 읽지 않는다 (문장이 없다)
+#
+# ★ 제목 계층을 따라가지 않는다. 44호가 네 서식으로 쓰여 있어서 '절 → 소절 → 블록' 을
+#   맞히려 들면 호마다 규칙이 하나씩 붙는다(실측: 37/44 파일만 읽히고 hazard 62% 가 빈칸).
+#   그래서 **블록 경계만 찾고 라벨은 근처에서 역으로 뽑는다** — hazard 는 블록 위로
+#   거슬러 가장 가까운 재해 낱말, crop 은 블록 위 25줄의 작물 이름.
+#   번호가 '1' 이든 '가' 이든, 제목이 한 줄이든 두 줄이든 이 방식은 상관하지 않는다.
 # ─────────────────────────────────────────────────────────────────────
 
 _회보호수 = re.compile(r"제(\d+)호")
-_Ⅱ장 = re.compile(r"^\s*Ⅱ\.\s*농작물")
-_Ⅲ장 = re.compile(r"^\s*Ⅲ\.")
-_재해절 = re.compile(r"^\s*\d+\.\s*(.{1,40}?(대비|대책|관리요령|기술지도).*)$")
-_작물소절 = re.compile(r"^\s*\d+\)\s*(.{1,20})$")
-_참고제목 = re.compile(r"^\s*(\S.{2,30}?(피해|대비).{0,12}대책)\s*$")
-_블록 = re.compile(r"^\s*【\s*(.+?)\s*】\s*$")
-_대책블록 = re.compile(r"대책|발생\s*전|발생\s*시|종료\s*후|발생\s*후")
+# Ⅱ장 머리. 'Ⅱ' 단독줄(구형)과 'Ⅱ  농작물 피해 예방 관리기술'(2026 신형)을 둘 다 받는다
+_Ⅱ장 = re.compile(r"^\s*Ⅱ(\s*$|[.\s]\s*농작물)")
+_Ⅲ장 = re.compile(r"^\s*Ⅲ(\s|\.|$)")
+
+# 블록 머리 두 꼴. 【사전대책】(구형) · (가) 사전대책(2026 제3·4호는 【】 를 아예 안 쓴다)
+_블록꼴 = (
+    re.compile(r"^\s*【\s*(.+?)\s*】\s*$"),
+    re.compile(r"^\s*\([가나다라마]\)\s*(.{1,20}?)\s*$"),
+)
+# 블록 이름에 이 말이 있어야 대책 단계다. 【최근 10년 특보 현황】 같은 표 제목을 거른다
+_단계말 = re.compile(r"사전\s*대책|사후\s*대책|발생\s*전|발생\s*시|발생\s*후|종료\s*후|예방|대책")
 _본문줄 = re.compile(r"^\s*[○◦•\-–※]")
-_재해낱말 = ("강풍", "우박", "황사", "일조부족", "집중호우", "호우", "태풍", "가뭄", "폭염", "고온", "저온", "냉해",
-             "동해", "서리", "한파", "대설", "폭설", "침수", "장마", "이상기상")
+
+# 재해 이름을 열 가지로 닫는다. 왼쪽이 저장값, 오른쪽은 본문에 나오는 말들.
+# 닫지 않으면 '작물별관리대책' 같은 절 제목이 그대로 hazard 가 된다(실측 30건).
+# '동해' 에 저온·서리·한파를 몰아넣은 것은 crop_disaster_rules 의 rule_kind 와
+# 맞추기 위해서다 — 저쪽은 frost/heat 두 갈래다
+_재해표 = {
+    "집중호우": ("집중호우", "호우", "침수", "침관수", "폭우"),
+    "태풍": ("태풍",),
+    "강풍": ("강풍", "돌풍"),
+    "폭염": ("폭염", "고온해", "고온"),
+    "대설": ("대설", "폭설"),
+    "동해": ("동해", "언 피해", "언피해", "서릿발", "한파", "저온", "냉해", "서리"),
+    "우박": ("우박",),
+    "황사": ("황사",),
+    "일조부족": ("일조부족", "일조 부족"),
+    "가뭄": ("가뭄", "한발"),
+}
 
 
-def _재해(제목):
-    """'2. 우박 대비 작물별 관리요령' → '우박'. 낱말 표에 없으면 제목 앞 열 글자."""
-    for w in _재해낱말:
-        if w in 제목:
-            return w
-    return "".join(제목.split())[:10]
+def _재해(줄):
+    """
+    # summary
+    한 줄에서 재해 하나를 찾는다. 공백을 지우고 견준다 — 원본이 '언 피해' 처럼 띄운다.
+
+    # params
+    줄: 검사할 줄. 제목이든 본문이든 상관없다<br>
+
+    # returns
+    _재해표 의 정본 이름. 없으면 None
+    """
+    평 = "".join(줄.split())
+    for 정본, 별칭들 in _재해표.items():
+        if any("".join(a.split()) in 평 for a in 별칭들):
+            return 정본
+    return None
+
+
+def _단계(이름):
+    """
+    # summary
+    블록 이름을 여섯 단계로 접는다. '강풍발생 전' → '발생전'.
+
+    # params
+    이름: 블록 머리에서 꺼낸 이름<br>
+
+    # returns
+    사전대책 · 사후대책 · 발생전 · 발생시 · 발생후 · 종료후 중 하나. 값이 닫혀 있어야
+    나중에 phase 로 거를 수 있다
+    """
+    평 = "".join(이름.split())
+    for k in ("사전대책", "사후대책", "발생전", "발생시", "발생후", "종료후"):
+        if k in 평:
+            return k
+    return "사전대책" if "예방" in 평 else "사후대책"
 
 
 def disaster_bulletins():
+    """
+    # summary
+    월간회보 44호의 Ⅱ장에서 대책 블록을 뽑는다. 블록 하나가 문서 하나다.
+
+    # params
+    없다. 원본 경로는 모듈 상수 `원본` 에서 읽는다 — 원본/재해예방정보/본문/*월간회보*.txt<br>
+
+    # returns
+    계약("disaster_bulletins.csv") 순서의 dict 목록. 호마다 ordinal 이 1부터 다시 센다
+
+    # examples
+        len(disaster_bulletins())  -> 1881   (44호 · 2023~2026)
+    """
     행들 = []
     for path in sorted((원본 / "재해예방정보" / "본문").glob("*월간회보*.txt")):
-        줄들 = 읽기(path)
-        year = int(path.name[:4])
         m = _회보호수.search(path.name)
         if not m:
-            print(f"  ⚠ 호수 못 읽음: {path.name}"); continue
-        month = int(m.group(1))
+            print(f"  ⚠ 호수 못 읽음: {path.name}")
+            continue
+        year, month = int(path.name[:4]), int(m.group(1))
 
-        읽는중, hazard, crop_hint, block, body, ordinal = False, "", "", None, [], 0
+        # 빈 줄과 잡음을 먼저 걷어낸다. 아래 규칙이 '몇 줄 위' 를 세므로 여기서 한 번에 치운다.
+        # 옛 코드가 37/44 에서 멈춘 것도 번호줄과 제목줄 사이의 빈 줄 때문이었다
+        줄들 = [l for l in 읽기(path) if l.strip() and not _잡음.match(l)]
 
-        def 닫기():
-            nonlocal block, body, ordinal
-            if block and body:
-                텍스트 = "\n".join(body)
-                if len(텍스트) >= 40:
-                    ordinal += 1
-                    행들.append({
-                        "issue_year": year, "issue_month": month, "ordinal": ordinal,
-                        "hazard": hazard, "crop_names": ",".join(sorted(crops_in_line(crop_hint))),
-                        "phase": "".join(block.split()), "body": 텍스트, "source_file": path.name,
-                    })
-            block, body = None, []
+        # Ⅱ장 머리는 목차에도 있다. **마지막** 것이 본문이다 — 목차는 언제나 앞에 온다
+        후보 = [i for i, l in enumerate(줄들) if _Ⅱ장.match(l)]
+        if not 후보:
+            print(f"  ⚠ Ⅱ장 못 찾음: {path.name}")
+            continue
+        시작 = 후보[-1]
+        끝 = next((i for i in range(시작 + 1, len(줄들)) if _Ⅲ장.match(줄들[i])), len(줄들))
+        본 = 줄들[시작:끝]
 
-        for s in 줄들:
-            if _Ⅱ장.match(s):
-                읽는중 = True; continue
-            if 읽는중 and _Ⅲ장.match(s):
-                break
-            if not 읽는중 or _잡음.match(s):
+        # ① 블록 경계만 모은다. 서식에 기대는 곳은 여기 하나뿐이다
+        경계 = []
+        for i, s in enumerate(본):
+            for 꼴 in _블록꼴:
+                g = 꼴.match(s)
+                if g and _단계말.search(g.group(1)):
+                    경계.append((i, g.group(1)))
+                    break
+
+        ordinal = 0
+        for n, (i, 이름) in enumerate(경계):
+            j = 경계[n + 1][0] if n + 1 < len(경계) else len(본)
+            줄모음 = [t.strip() for t in 본[i + 1:j]
+                      if _본문줄.match(t) or len(t.strip()) >= 15]
+            if not 줄모음:
                 continue
-            g = _재해절.match(s)
-            if g:
-                닫기(); hazard = _재해(g.group(1)); crop_hint = ""; continue
-            c = _작물소절.match(s) or _참고제목.match(s)
-            if c:
-                닫기(); crop_hint = c.group(1); continue
-            b = _블록.match(s)
-            if b:
-                닫기()
-                block = b.group(1) if _대책블록.search(b.group(1)) else None   # 【최근 10년 특보 현황】 같은 표 제목은 블록이 아니다
-                continue
-            if block and s.strip() and (_본문줄.match(s) or len(s.strip()) >= 15):
-                body.append(s.strip())
-        닫기()
+
+            # ② hazard — 블록에서 위로 거슬러 가장 가까운 재해 낱말. 절 제목이 대개 여기 걸린다.
+            #    120줄은 한 블록이 앞 제목에서 떨어질 수 있는 거리다(표·그림 캡션이 사이에 낀다)
+            hazard = next(
+                (_재해(본[k]) for k in range(i, max(i - 120, -1), -1) if _재해(본[k])), None
+            )
+
+            # ③ crop — 블록 위 25줄에서 가까운 것부터. 작물 소절이 '1) 배' 든 '가  사과' 든
+            #    '【사 과】' 든 이름만 있으면 crops_in_line 이 찾는다
+            crops = set()
+            for k in range(i, max(i - 25, -1), -1):
+                crops = crops_in_line(본[k])
+                if crops:
+                    break
+
+            phase = _단계(이름)
+            # 상한을 넘으면 줄 경계에서 잘라 여러 문서로 낸다(pest_bulletins 와 같은 이유 —
+            # 한 문서가 길면 chunker 가 만든 조각들의 title 이 전부 같아 구분이 안 된다)
+            for 조각 in _토막내기(줄모음, 문서상한):
+                if len(조각) < 40:
+                    continue
+                if hazard is None:
+                    hazard = _재해(조각[:300])
+                if not crops:
+                    crops = crops_in_line(조각[:200])
+                ordinal += 1
+                행들.append({
+                    "issue_year": year, "issue_month": month, "ordinal": ordinal,
+                    "hazard": hazard or "", "crop_names": ",".join(sorted(crops)),
+                    "phase": phase, "body": 조각, "source_file": path.name,
+                })
     return 행들
 
 
