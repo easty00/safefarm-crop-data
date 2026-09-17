@@ -192,6 +192,9 @@ _병기간 = re.compile(r"〔제(\d+)호\s*/\s*(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2
 _병절 = re.compile(r"^\s*[Ⅰ-Ⅹ]+\.\s*(.+?)\s*$")
 _병항목 = re.compile(r"^\s*(\d+)\s+(\S.*?)\s*<\s*(주의보|경보|예보)\s*>")
 _병끝 = re.compile(r"^\s*[Ⅰ-Ⅹ]+\.\s*(시·도별|지역별|주요 부적합)")
+# 등록약제 표. "갓 Dinotefuran 0.1 0.1 당해성분 …" 꼴 — 작물명 · 영문 성분 · 잔류기준 둘.
+# 본문이 아니라 부록이고, 여기 작물명이 crops_in_line 에 걸려 과수화상병에 감자·배추가 붙었다(26행, 2026-09-18 실측)
+_약제표 = re.compile(r"[A-Z][a-z]{3,}\s+\d\.\d+\s+\d\.\d+")
 _캡션 = re.compile(r"^\s*(【.*】\s*)+$")
 _문장끝 = re.compile(r"[.。]\s*$|[다음함임됨요]\s*$")
 
@@ -262,6 +265,9 @@ def pest_bulletins():
             if item and body:
                 줄들 = _줄잇기(body)
                 pest, level = item
+                # '(무․배추) 뿌리혹병, 무름병' → '뿌리혹병, 무름병'. 작물 괄호는 crop_names 가 따로 든다.
+                # 이름을 접지 않으면 같은 병이 호마다 다른 pest_name 으로 갈려 148종이 된다(실제 109종)
+                pest = re.sub(r"\([^)]*\)", "", pest).strip(" ,·‧․")
                 # 상한을 넘으면 줄 경계에서 잘라 여러 문서로 낸다. 한 문서가 14,229자면
                 # chunker 가 조각 10여 개로 나누는데 title 이 전부 같아 구분이 안 된다
                 for 조각 in _토막내기(줄들, 문서상한):
@@ -288,7 +294,7 @@ def pest_bulletins():
             h = _병항목.match(s)
             if h:
                 닫기(); item = (h.group(2).strip(), h.group(3)); continue
-            if item and s.strip():
+            if item and s.strip() and not _약제표.search(s):
                 body.append(s)
         닫기()
     return 행들
