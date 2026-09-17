@@ -170,6 +170,16 @@ _병끝 = re.compile(r"^\s*[Ⅰ-Ⅹ]+\.\s*(시·도별|지역별|주요 부적�
 _캡션 = re.compile(r"^\s*(【.*】\s*)+$")
 _문장끝 = re.compile(r"[.。]\s*$|[다음함임됨요]\s*$")
 
+# 문서 하나의 상한. 넘으면 잘라서 여러 문서로 낸다.
+#
+# ⚠ 쪼개는 기준을 '< 이름 >' 으로 삼으면 안 된다 — 그건 하위 항목이 아니라 **그림 캡션**이다
+#   ('< 갈색날개매미충 >' 은 그림 안 라벨이라 쪼개면 한 줄짜리 문서가 생긴다).
+#   전체에 31개뿐이고 14,229자짜리에도 둘밖에 없어 쪼개지지도 않는다.
+#
+# 큰 덩이가 생기는 진짜 이유는 **그 호의 마지막 항목**이라 다음 제목이 없어서다
+# (2024/5호 '7 과수해충' 뒤로 농약 잔류 절까지 통째). 그래서 길이로 자른다.
+# 2,000자는 body 중앙값 270자의 7배 — 1,021행 중 56행(5.5%)만 걸린다
+문서상한 = 2000
 
 def _줄잇기(줄들):
     """PDF 강제 줄바꿈 복원. 앞 줄이 문장 끝이 아니면 다음 줄을 붙인다.
@@ -181,6 +191,33 @@ def _줄잇기(줄들):
         else:
             out.append(s.strip())
     return out
+
+def _토막내기(줄들, 상한):
+    """
+    # summary
+    줄 목록을 상한 이하 덩이로 나눈다. **줄 경계에서만** 자른다 — 문장 가운데를 끊으면
+    그 조각만으로는 뜻이 안 통한다.
+
+    # params
+    줄들: _줄잇기 를 거친 줄 목록<br>
+    상한: 한 덩이의 최대 글자 수. 한 줄이 그보다 길면 그 줄은 혼자 한 덩이가 된다<br>
+
+    # returns
+    '\\n' 으로 이은 문자열 목록. 원문 순서를 지킨다. 줄들이 비면 빈 리스트
+
+    # examples
+        _토막내기(['가' * 1500, '나' * 1500], 2000)  -> ['가...', '나...']   # 둘로
+    """
+    덩이, 모음, 길이 = [], [], 0
+    for 줄 in 줄들:
+        if 모음 and 길이 + len(줄) > 상한:
+            덩이.append("\n".join(모음))
+            모음, 길이 = [], 0
+        모음.append(줄)
+        길이 += len(줄) + 1
+    if 모음:
+        덩이.append("\n".join(모음))
+    return 덩이
 
 
 def pest_bulletins():
@@ -198,16 +235,20 @@ def pest_bulletins():
         def 닫기():
             nonlocal item, body, ordinal
             if item and body:
-                텍스트 = "\n".join(_줄잇기(body))
-                if len(텍스트) >= 40:
+                줄들 = _줄잇기(body)
+                pest, level = item
+                # 상한을 넘으면 줄 경계에서 잘라 여러 문서로 낸다. 한 문서가 14,229자면
+                # chunker 가 조각 10여 개로 나누는데 title 이 전부 같아 구분이 안 된다
+                for 조각 in _토막내기(줄들, 문서상한):
+                    if len(조각) < 40:
+                        continue
                     ordinal += 1
-                    pest, level = item
                     행들.append({
                         "issue_year": int(y), "issue_no": int(no), "ordinal": ordinal,
                         "period_from": pf, "period_to": pt,
                         "crop_group": group, "pest_name": pest, "level": level,
-                        "crop_names": ",".join(sorted(crops_in_line(pest + " " + 텍스트))),
-                        "body": 텍스트, "source_file": path.name,
+                        "crop_names": ",".join(sorted(crops_in_line(pest + " " + 조각))),
+                        "body": 조각, "source_file": path.name,
                     })
             item, body = None, []
 
