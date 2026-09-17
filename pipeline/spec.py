@@ -114,6 +114,7 @@ def 온도():
         작물 = re.sub(r"[*`~\s]", "", r["작물"])
         if not 작물 or 작물 not in CROP_ALIAS:
             continue                      # 등록표에 없는 작물 — 확정표에만 남은 연구값
+        작물 = CROP_ALIAS[작물]      # 공백 지운 꼴이 아니라 등록표의 표준명으로. '사료용귀리' → '사료용 귀리'
         out[작물] = {
             "base_temp": _수(r["base_temp"], f"{작물}.base_temp"),
             "upper_temp": _수(r["upper_temp"], f"{작물}.upper_temp"),
@@ -153,6 +154,7 @@ def 관리노력():
         작물 = re.sub(r"[*`~\s]", "", r["작물"])
         if not 작물 or 작물 not in CROP_ALIAS:
             continue                      # 등록표에 없는 작물
+        작물 = CROP_ALIAS[작물]      # 공백 지운 꼴이 아니라 등록표의 표준명으로. '사료용귀리' → '사료용 귀리'
         등급 = re.sub(r"[*`\s]", "", r["difficulty"])
         if not 등급 or 등급 == "—":
             continue                      # 비워 둔 작물. 값이 없는 것이 맞다
@@ -239,7 +241,7 @@ def 작형():
 
         방법, 시작, 끝 = _파종창(r["파종·정식"], 키)
         out.append({
-            "작물": 키.split("_")[0],
+            "작물": CROP_ALIAS[키.split("_")[0]],   # 표준명. 작물키 자체는 그대로 둔다 — gdd.csv 의 줄 식별자다
             "작물키": 키,
             "작형": re.sub(r"[*`]", "", r["작형"]).strip(),
             "지역": r.get("지역 후보", ""),
