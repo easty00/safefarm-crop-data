@@ -34,6 +34,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "feature"))
 
+import cropping  # noqa: E402
 import spec  # noqa: E402
 from crops import CROP_ALIAS, nospace  # noqa: E402
 from common import era_edge, middle_day  # noqa: E402
@@ -236,8 +237,12 @@ def _작형_일정(일정행들, 있는작물):
         작물 = 표준작물(r.get("작물"))
         if not 작물 or 작물 in 있는작물:
             continue
+        # ⚠ 작형이 `정보구분` 꼬리에만 있는 문서와 `작형` 칸에만 있는 문서가 둘 다 있다.
+        #   꼬리만 보면 피망이 샌다 — 꼬리가 없어 '기본' 이 되는데 `작형` 칸에는
+        #   '촉성재배' 가 적혀 있다(2026-09-18). 둘 다 보고 있는 쪽을 쓴다.
         꼬리 = (r.get("정보구분") or "").split(" - ", 1)
-        묶.setdefault((작물, 꼬리[1].strip() if len(꼬리) > 1 else ""), []).append(r)
+        작형이름 = (꼬리[1].strip() if len(꼬리) > 1 else "") or (r.get("작형") or "").strip()
+        묶.setdefault((작물, 작형이름), []).append(r)
 
     큰것 = {}
     for (작물, 작형), 행 in 묶.items():
@@ -682,6 +687,7 @@ def crop_stages(일정행들, variants, 작형표, 안내=None):
         숙기별.setdefault(v["crop_name"], []).append(v["maturity_type"])
 
     행들 = []
+    버린단계 = []
     for 작물, 묶 in sorted(덩이별.items()):
         # 시작 중앙일 차례로 세운다. 월·순 만으로는 해를 넘기는 작물이 어긋난다
         # 재배 시작 단계를 0일로 놓고 그로부터 며칠째인지로 세운다(위 ⚠)
@@ -695,6 +701,18 @@ def crop_stages(일정행들, variants, 작형표, 안내=None):
             if 본 and 본[-1][0] == 이름:
                 continue                  # 같은 이름이 잇달으면 한 단계다
             본.append((이름, r))
+
+        # ⚠ **수확이 한가운데 오면 그 작물의 단계를 통째로 버린다.**
+        #   작형 여럿이 한 줄기로 붙었다는 자국이다 —
+        #     당근  봄재배 씨뿌림 → … → 수확 → 가을재배 씨뿌림
+        #     갓    씨뿌림 → 수확 → 어린 모 시기(유묘기)
+        #   순서를 손으로 고칠 수 없으니(어느 단계가 어느 작형인지 자료에 없다)
+        #   **비우는 쪽이 옳다.** 단계가 없는 숙기는 verify·master_seed 둘 다
+        #   정상으로 본다 — "농작업일정에 생육과정이 실린 작물만 단계가 나온다".
+        if not cropping.수확이_마지막인가([n for n, _ in 본]):
+            버린단계.append(작물)
+            continue
+
         for 숙기 in 숙기별.get(작물, []):
             for i, (이름, r) in enumerate(본, 1):
                 행들.append({
@@ -712,6 +730,10 @@ def crop_stages(일정행들, variants, 작형표, 안내=None):
                     "종료중앙일": r.get("종료중앙일", ""),
                     "source": f"농작업일정 {r.get('출처파일', '')}",
                 })
+    if 버린단계:
+        print(f"  · 단계를 비운 작물 {len(버린단계)}개 — 수확이 마지막이 아니다"
+              f" (작형 여럿이 붙은 자국): {' · '.join(sorted(버린단계)[:6])}"
+              + (" …" if len(버린단계) > 6 else ""))
     return 행들
 
 def 구간채우기(단계행들, variants, 작형표, 온도표):
@@ -1033,14 +1055,19 @@ def main():
         작물들 = set(온도표)
 
     # 확정표 §A 에 없는 작물의 작형·파종일·재배일수는 첨부 작형표에서 만든다
-    보탠작형 = _작형_자료(일정, {r["작물"] for r in 작형표})
+    # ⚠ ②③ 만 거른다. §A 는 사람이 고른 정본이라 손대지 않는다(cropping.py 맨 위)
+    뺀까닭 = {}
+    보탠작형 = cropping.거르기(_작형_자료(일정, {r["작물"] for r in 작형표}), 뺀까닭)
     작형표 = 작형표 + 보탠작형
     # 작형표조차 없는 작물은 일정 자체에서 역산한다. 세 층의 차례가 곧 미더움의 차례다
-    역산작형 = _작형_일정(일정, {r["작물"] for r in 작형표})
+    역산작형 = cropping.거르기(_작형_일정(일정, {r["작물"] for r in 작형표}), 뺀까닭)
     작형표 = 작형표 + 역산작형
     print(f"  · 작형 — 확정표 §A {len(작형표) - len(보탠작형) - len(역산작형)}행"
           f" + 첨부 작형표 {len(보탠작형)}행 + 일정 역산 {len(역산작형)}행"
           f"   ({len({r['작물'] for r in 작형표})}작물)")
+    if 뺀까닭:
+        print(f"      뺀 작형 — 시설 {뺀까닭.get('시설', 0)}개"
+              f" · {cropping.최대일수}일 이상 {뺀까닭.get('장기', 0)}개")
 
     c = crops(온도표, 관리표, 작물들)
     v = crop_variants(작물들, 작형표, 접기, 수박표, 분할작물, 품종들)

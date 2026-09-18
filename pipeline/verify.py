@@ -49,9 +49,16 @@ sys.path.insert(0, str(HERE))
 }
 
 # nullable=False 인 칸. 비면 적재가 깨진다
+# ⚠ base_temp·gdd_target 은 **여기 없는 것이 맞다.** 저쪽이 2026-09-17 에 nullable 로
+#   바꿨다(ai-service/app/models/farm/crop.py `⚠ nullable 이다(2026-09-17). 이 표의 역할이
+#   "GDD 엔진 테이블" 에서 "작물 사전" 으로` · crop_variant.py `gdd_target = Column(Integer)`).
+#   전체 작물로 방침이 바뀌면서 값이 없는 작물이 정상이 됐기 때문이다.
+#   ⚠ 뺀다고 감시가 사라지지 않는다 — 아래 `· §B-2 에 없어 base_temp 가 빈 작물 N개` 가
+#     따로 세어 알린다. NOT NULL 에서 빼는 것은 "적재가 깨지느냐" 의 판정에서 빼는 것이지
+#     "값이 비었다" 는 사실을 감추는 것이 아니다.
 필수 = {
-    "crops": ["name", "base_temp"],
-    "crop_variants": ["crop_name", "maturity_type", "gdd_target"],
+    "crops": ["name"],
+    "crop_variants": ["crop_name", "maturity_type"],
     "crop_stages": ["crop_name", "maturity_type", "stage_order", "stage_name",
                     "gdd_from", "gdd_to", "fertilize_needed"],
     "crop_disaster_rules": ["crop_name", "hazard", "rule_kind", "metric", "op",
@@ -239,6 +246,34 @@ def 이음(자료):
     return 문제
 
 
+def 수확차례(자료):
+    """단계 차례에서 **수확이 맨 끝인가.** 아니면 작형 여럿이 붙은 것이다.
+
+    ⚠ 숫자로는 멀쩡해 보인다 — 빈칸도 끊김도 없다. 그런데 뜻이 깨져 있다.
+        당근  봄재배 씨뿌림 → … → 수확 → **가을재배 씨뿌림**
+        갓    씨뿌림 → 수확 → **어린 모 시기(유묘기)**
+      이대로 시딩하면 밭 상세에 "수확 다음 정식포준비" 가 뜨고
+      할 일 카드가 그 단계명으로 만들어진다 (2026-09-18 검토에서 25숙기 발견).
+
+    ⚠ 수확이 **아예 없는** 것은 어긋남이 아니다. 잎을 계속 따는 산채가 그렇다.
+      가려내려는 것은 수확 뒤에 파종·육묘 단계가 오는 꼴이다.
+    """
+    수확낱말 = ("수확", "거두기", "수매")
+    단계 = {}
+    for r in 자료["crop_stages"]:
+        단계.setdefault((r.get("crop_name"), r.get("maturity_type")), []).append(r)
+
+    문제 = []
+    for 열쇠, 행들 in sorted(단계.items()):
+        행들 = sorted(행들, key=lambda r: int(r.get("stage_order") or 0))
+        이름들 = [(r.get("stage_name") or "") for r in 행들]
+        자리 = [i for i, n in enumerate(이름들) if any(w in n for w in 수확낱말)]
+        if 자리 and 자리[-1] != len(이름들) - 1:
+            뒤 = " → ".join(이름들[자리[-1]:])
+            문제.append(f"{열쇠[0]}/{열쇠[1]}: 수확 뒤에 단계가 더 있다 — {뒤[:60]}")
+    return 문제
+
+
 def 단계연속(자료):
     """저쪽 stage_problems() 를 그대로 옮긴 것.
 
@@ -340,6 +375,7 @@ def main():
         ("겹침 (UNIQUE)", 겹침(자료)),
         ("이음 (REFS)", 이음(자료)),
         ("단계 연속", 단계연속(자료)),
+        ("수확이 마지막", 수확차례(자료)),
         ("확정표 대조", 확정표대조(자료)),
     ]
     총 = list(문제)

@@ -115,13 +115,16 @@ def 작형전부():
       build 는 `if __name__ == "__main__"` 가드가 있어 import 만으로는 아무것도 안 돈다.
     """
     import build  # noqa: PLC0415 — 순환 아님(위 주석). 맨 위로 올리면 spec 보다 먼저 로드된다
+    import cropping  # noqa: PLC0415
 
     작형표 = list(spec.작형())
     일정경로 = build.OUT / "mid_schedule.csv"
     if 일정경로.exists():
         일정 = build.읽기(일정경로)
-        작형표 += build._작형_자료(일정, {r["작물"] for r in 작형표})
-        작형표 += build._작형_일정(일정, {r["작물"] for r in 작형표})
+        # ⚠ build 와 **똑같이** 거른다. 한쪽만 거르면 단계는 노지인데 목표값은
+        #   시설로 계산되는 어긋남이 생긴다(cropping.py 맨 위)
+        작형표 += cropping.거르기(build._작형_자료(일정, {r["작물"] for r in 작형표}))
+        작형표 += cropping.거르기(build._작형_일정(일정, {r["작물"] for r in 작형표}))
     return 작형표
 
 
