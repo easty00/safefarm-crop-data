@@ -17,6 +17,7 @@
 
 import csv
 import io
+import re
 import sys
 from pathlib import Path
 
@@ -85,6 +86,10 @@ REFS = [
 
 # ck_crop_variants_maturity
 숙기값 = ("EARLY", "MID", "LATE")
+
+# ck_crops_difficulty — 2026-09-18 에 `강·중·약` 에서 바뀌었다.
+# 저쪽 프런트(cropOption.ts)가 쓰는 낱말에 맞춘 것이다. 저쪽 모델도 같이 바뀌어야 한다.
+난이도값 = ("쉬움", "보통", "어려움")
 
 # crop_disaster_rules 의 CHECK 세 가지
 hazard값 = ("frost", "heat")
@@ -185,6 +190,12 @@ def 제약(자료):
         if 나쁨:
             문제.append(f"crop_disaster_rules.{칸이름}: {'/'.join(허용)} 가 아닌 값 {나쁨}")
 
+    나쁜난이도 = sorted({r["difficulty"] for r in 자료["crops"]
+                       if r.get("difficulty") and r["difficulty"] not in 난이도값})
+    if 나쁜난이도:
+        문제.append(f"crops.difficulty: {'/'.join(난이도값)} 가 아닌 값 {나쁜난이도}"
+                    "  (ck_crops_difficulty 에 걸린다)")
+
     나쁜구분 = sorted({r["section"] for r in 자료.get("crop_guides", [])
                      if r.get("section") and r["section"] not in section값})
     if 나쁜구분:
@@ -259,6 +270,11 @@ def 수확차례(자료):
       가려내려는 것은 수확 뒤에 파종·육묘 단계가 오는 꼴이다.
     """
     수확낱말 = ("수확", "거두기", "수매")
+    # ⚠ 수확이 **아닌데** 수확 글자가 든 말. 체리의 `착과수확보`(착과·수확 확보)가
+    #   수확으로 잡혀 여기서 오탐이 났다(2026-09-18).
+    #   pipeline/cropping.py 에 같은 목록이 있지만 **일부러 한 번 더 적는다** —
+    #   검사가 검사 대상을 import 하면 둘이 같이 틀릴 수 있다(이 파일 맨 위 원칙).
+    수확아님 = ("수확보", "수확확보", "수확예정", "수확기예상")
     단계 = {}
     for r in 자료["crop_stages"]:
         단계.setdefault((r.get("crop_name"), r.get("maturity_type")), []).append(r)
@@ -267,7 +283,11 @@ def 수확차례(자료):
     for 열쇠, 행들 in sorted(단계.items()):
         행들 = sorted(행들, key=lambda r: int(r.get("stage_order") or 0))
         이름들 = [(r.get("stage_name") or "") for r in 행들]
-        자리 = [i for i, n in enumerate(이름들) if any(w in n for w in 수확낱말)]
+        자리 = [
+            i for i, n in enumerate(이름들)
+            if any(w in n for w in 수확낱말)
+            and not any(w in re.sub(r"\s", "", n) for w in 수확아님)
+        ]
         if 자리 and 자리[-1] != len(이름들) - 1:
             뒤 = " → ".join(이름들[자리[-1]:])
             문제.append(f"{열쇠[0]}/{열쇠[1]}: 수확 뒤에 단계가 더 있다 — {뒤[:60]}")

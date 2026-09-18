@@ -35,6 +35,9 @@ python pipeline/extract.py --merge  # 다시 안 돌리고 있는 것만 모은�
 python pipeline/extract_pest_alert.py   # 병해충 경보 → out/pest_alert.csv (따로)
 
 # 도구 (단독 실행)
+python pipeline/coverage_report.py             # 스키마 CSV 어느 칸이 얼마나 비었나
+python pipeline/difficulty.py           # 난이도 추정 규칙을 §H 22작물과 대조
+python feature/search_source.py <낱말>  # ★ 원본 전문 검색. "없다" 고 결론내기 전에 이것부터
 python feature/hwp_extract.py <폴더>    # hwp/hwpx → txt
 python feature/ocr.py <폴더>            # 스캔 PDF → txt
 
@@ -369,12 +372,30 @@ feature/          ★ 도구. 검증된 것만 둔다. 규칙("무엇을 값으�
   ocr.py            스캔 PDF (재해예방정보 일부가 이미지)
   clean_text.py     제어문자 제거. 진짜 한자를 지우지 않는 로직 포함
   temperature.py    본문에서 온도값 추출. 문장형까지 잡는다 (372→870건)
+  search_source.py  ★ 원본 첨부 **전문** 검색. 조사할 때 맨 먼저 쓴다
+                    `python feature/search_source.py <낱말> [--서비스 --작물 --문맥 --셈만]`
+                    txt 변환본이 아니라 원본을 읽고 · PDF 는 pypdf/pymupdf 둘 다 재고
+                    · 앞뒤 줄을 같이 보이고 · **0자 파일 수를 알린다**
+                    ⚠ 0자가 있으면 "없다" 가 아니라 "못 읽었다" 다. 실패 다섯 번의 결론이
+                      파일 머리에 적혀 있다. 글자는 pipeline/out/전문캐시/ 에 남는다
 
 pipeline/         ★ 새 파이프라인. 원본 하나에 파일 하나
   crops.py          ★★ 작물 이름 예외표 + 이름 찾기(crops_in_line). lst_*.xml 로 자동 등록
   spec.py           ★ 확정표(작물_확정표.md)의 표를 **직접 읽는다**. build 의 입력
                     값을 코드에 베끼지 않는다. 표는 차례가 아니라 칸 이름으로 찾고,
                     못 찾으면 조용히 비우지 않고 `확정표오류` 로 터뜨린다
+  cropping.py       작형을 고르는 규칙 하나. build 와 gdd_backfill 이 **같이** 쓴다
+                    시설 작형 거르기 · 250일 넘는 작형 거르기 · 숙기별 일수 비율(0.9/1.0/1.1)
+                    ⚠ 한쪽만 거르면 단계는 노지인데 목표값은 시설이 된다
+  parts.py          작물 → 이용 부위(과채·엽채·근채·서류·인경·곡류·두류·특용·과수·사료)
+                    『텃밭 디자인』 8쪽 분류가 근거. difficulty 추정의 축 하나
+  difficulty.py     §H 에 없는 작물의 난이도 추정 (이용 부위 + 병해충 발생빈도 + 방임재배)
+                    규칙의 정본은 이 파일, 근거는 확정표 §H-2. `python pipeline/difficulty.py`
+                    로 §H 22작물과 대조한다 (2026-09-18 기준 20/22)
+  coverage_report.py
+                    스키마 CSV 의 칸별 채움률 — "지금 뭐가 비었나" 를 한 번에 센다
+                    `python pipeline/coverage_report.py [--빈것 guide_text]`
+                    ⚠ verify 와 하는 일이 다르다. 저쪽은 적재가 깨지나, 여기는 비었나
   forms.py          농작업일정 첨부의 작형별 출하시기 표 → out/mid_form.csv
                     표 위치가 작물마다 달라 머리글로 찾는다. 시기 칸이 없는 표는 건너뛴다
   gdd_backfill.py   기준표/평년값.csv 로 gdd_target 역산 → out/gdd.csv
@@ -410,6 +431,7 @@ pipeline/         ★ 새 파이프라인. 원본 하나에 파일 하나
   작업기록.md        2026-09-16 세션 기록. 잡은 버그 · 없는 것 · Safe-farm 넘어가는 경계(§5)
                     · 다음에 할 일(§7)
   out/              mid_*.csv · gdd.csv · 충돌.csv · varieties.csv (추적 안 함)
+  out/전문캐시/      search_source.py 가 원본을 편 글자. 크기·수정시각으로 갱신된다
   out/스키마/        저쪽으로 넘어가는 CSV. 근거/ 는 같은 행 + 출처 칸
   out/원본별/        원본별 중간 결과. 날 행(접기 전)이다
 

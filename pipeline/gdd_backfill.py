@@ -19,6 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import cropping  # noqa: E402
 import spec  # noqa: E402
 
 평년값 = HERE.parent / "기준표" / "평년값.csv"
@@ -149,19 +150,25 @@ def main():
         for stn in a["관측소"] or [전국]:
             if stn not in 표:
                 raise SystemExit(f"{a['작물키']}: 평년값에 없는 관측소 {stn}")
-            행들.append({
-                "작물키": a["작물키"],
-                "작물": a["작물"],
-                "관측소": stn,
-                "파종일": a["파종일"],
-                "일수": int(a["일수"]),
-                "base_temp": 온도["base_temp"],
-                "upper_temp": 온도["upper_temp"],
-                "gdd": round(적산(
-                    표[stn], 차례, a["파종일"], a["일수"],
-                    온도["base_temp"], 온도["upper_temp"],
-                )),
-            })
+            # ⚠ **숙기마다 따로 적산한다.** 일수가 다르면 지나는 계절이 달라져
+            #   적산도 비례하지 않는다 — 조생을 "중생 × 0.9" 로 어림하면 틀린다.
+            #   비율의 근거는 cropping.숙기비율 주석에 있다.
+            for 숙기, _ in cropping.숙기비율.items():
+                일수 = cropping.숙기일수(a["일수"], 숙기)
+                행들.append({
+                    "작물키": a["작물키"],
+                    "작물": a["작물"],
+                    "숙기": 숙기,
+                    "관측소": stn,
+                    "파종일": a["파종일"],
+                    "일수": int(일수),
+                    "base_temp": 온도["base_temp"],
+                    "upper_temp": 온도["upper_temp"],
+                    "gdd": round(적산(
+                        표[stn], 차례, a["파종일"], 일수,
+                        온도["base_temp"], 온도["upper_temp"],
+                    )),
+                })
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with io.open(OUT, "w", encoding="utf-8", newline="") as fh:
