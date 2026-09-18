@@ -91,6 +91,15 @@ REFS = [
 # 저쪽 프런트(cropOption.ts)가 쓰는 낱말에 맞춘 것이다. 저쪽 모델도 같이 바뀌어야 한다.
 난이도값 = ("쉬움", "보통", "어려움")
 
+# sow_from · sow_to 의 꼴. **'MM-DD' 뿐이다.**
+#   저쪽 crop_variant.py 주석이 "'MM-DD' 두 개다(연도 없음)" 라고 약속한 그대로다.
+#
+# ⚠ 안쪽에는 `+MM-DD`(이듬해) 표기가 있다(common.py era_edge). 그게 CSV 까지 새어
+#   나오면 받는 쪽이 날짜로 파싱할 때 그 행에서만 깨진다 — build 의 `_시기()` 가
+#   내보내기 직전에 뗀다. 여기서 '+' 를 **막아** 그 마개가 빠졌는지 알아챈다.
+# ⚠ 해를 넘는 창은 `sow_to < sow_from` 으로 읽는다(셀러리 12-01 ~ 02-28).
+시기꼴 = re.compile(r"^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
+
 # crop_disaster_rules 의 CHECK 세 가지
 hazard값 = ("frost", "heat")
 metric값 = ("ta_min", "ta_max", "ta_avg")
@@ -189,6 +198,12 @@ def 제약(자료):
                       if r.get(칸이름) and r[칸이름] not in 허용})
         if 나쁨:
             문제.append(f"crop_disaster_rules.{칸이름}: {'/'.join(허용)} 가 아닌 값 {나쁨}")
+
+    나쁜시기 = sorted({(c, r[c]) for r in 자료["crop_variants"] for c in ("sow_from", "sow_to")
+                     if (r.get(c) or "").strip() and not 시기꼴.match(r[c].strip())})
+    if 나쁜시기:
+        문제.append(f"crop_variants sow_from/sow_to: 'MM-DD' 가 아닌 값 {나쁜시기}"
+                    "  ('+' 가 보이면 build 의 _시기() 를 안 거친 것이다)")
 
     나쁜난이도 = sorted({r["difficulty"] for r in 자료["crops"]
                        if r.get("difficulty") and r["difficulty"] not in 난이도값})
@@ -347,6 +362,16 @@ def 확정표대조(자료):
     """이쪽에만 있는 검사 — 값이 확정표와 같은가. 저쪽은 이걸 못 본다.
 
     CLAUDE.md "CSV 와 확정표가 다르면 확정표가 맞다. CSV 를 확정표에 맞춘다."
+
+    ★ 2026-09-18 — **일부러 비우는 경우가 생겼다**(사료작물 10개). 논문에 값이 있는데도
+      서비스가 안 다루는 작물이라 build 가 온도를 빼고 내보낸다.
+
+      그렇다고 여기에 사료작물 목록을 또 적지는 않는다. 같은 목록이 두 파일에 있으면
+      한쪽만 고쳤을 때 **검사가 조용히 무의미해진다.** 대신 `근거/crops.csv` 의
+      `source` 칸을 본다 — build 가 거기에 까닭을 적게 되어 있고, 이 검사는
+      **"까닭이 적혀 있는가" 를 확인한다.** 까닭 없이 비면 여전히 사고다.
+
+      이 프로젝트의 "모든 숫자에 source 를 붙인다" 가 검사로 쓰이는 첫 자리다.
     """
     문제 = []
     try:
@@ -355,7 +380,15 @@ def 확정표대조(자료):
     except Exception as e:  # noqa: BLE001
         return [f"확정표를 못 읽어 대조를 건너뛴다: {e}"]
 
+    # 근거 벌은 스키마와 같은 행이고 source 칸이 더 있다. 없으면 대조를 그냥 엄격하게 한다
+    근거경로 = 스키마 / "근거" / "crops.csv"
+    까닭 = {}
+    if 근거경로.exists():
+        with io.open(근거경로, encoding="utf-8-sig", newline="") as fh:
+            까닭 = {r["name"]: (r.get("source") or "") for r in csv.DictReader(fh)}
+
     있는것 = {r["name"]: r for r in 자료["crops"]}
+    일부러뺌 = 0
     for 작물, v in 온도표.items():
         r = 있는것.get(작물)
         if r is None:
@@ -368,7 +401,13 @@ def 확정표대조(자료):
         except (TypeError, ValueError):
             pass
         if 기대 is not None and 본것 != 기대:
+            # 비었고 근거에 까닭이 적혀 있으면 일부러 뺀 것이다 (build 의 `사료작물`)
+            if 본것 is None and "뺌" in 까닭.get(작물, ""):
+                일부러뺌 += 1
+                continue
             문제.append(f"crops.{작물}.base_temp: CSV {r['base_temp']} ≠ 확정표 {기대}")
+    if 일부러뺌:
+        print(f"  · 확정표에 값이 있는데 일부러 뺀 작물 {일부러뺌}개 — 근거/crops.csv 의 source 참고")
     남는것 = [n for n in 있는것 if n not in 온도표]
     if 남는것:
         # §B-2 에 없는 쪽이 이제 정상이다(spec.온도() 와 같은 판단). 원본에 있는 작물이
