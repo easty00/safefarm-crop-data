@@ -19,7 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from common import middle_day  # noqa: E402
+from common import era_edge, middle_day  # noqa: E402
 
 MID = HERE / "out" / "mid_table.csv"
 OUT = HERE / "out" / "mid_form.csv"
@@ -44,14 +44,36 @@ def _납작(s):
     """
     return re.sub(r"[\s/]+", "", s or "")
 
-def _첫날(칸):
-    """'3월 중순~/4월 하순' → '03-15'. 범위면 **앞쪽**을 쓴다.
+def _순들(칸):
+    """칸 안의 순(旬)을 차례대로. '3월 중순~/4월 하순' → [('3','중'), ('4','하')].
 
     ⚠ '/' 는 원문 줄바꿈이다. 지우지 않으면 '중순~/4월' 이 한 덩이로 붙는다.
+    """
+    return _순.findall((칸 or "").replace("/", " "))
+
+
+def _첫날(칸):
+    """'3월 중순~4월 하순' → '03-15'. 범위면 **앞쪽**의 중앙일이다.
+
     ⚠ 못 읽으면 빈 값을 돌려준다 — '-' 나 '8월~9월'(순이 없는 것)이 실제로 있다.
     """
-    m = _순.search((칸 or "").replace("/", " "))
-    return middle_day(m.group(1), m.group(2)) if m else ""
+    것들 = _순들(칸)
+    return middle_day(*것들[0]) if 것들 else ""
+
+
+def _끝날(칸):
+    """'3월 중순~4월 하순' → '04-30'. 범위의 **뒤쪽 끝날**이다.
+
+    ★ 2026-09-18 — 예전에는 앞날만 읽고 뒤를 버렸다. 그래서 시금치 봄재배가
+      '씨뿌림 02-05' 한 점이 됐는데 원문은 **2월 상순~5월 하순** 이다.
+      "언제까지 심어도 되나" 를 말하려면 끝이 있어야 한다.
+
+    ⚠ 끝날은 `era_edge(..., last=True)` 다. 중앙일(25일)을 끝으로 쓰면 하순에
+      심어도 되는 날이 창 밖으로 밀린다 — crop_variants 의 sow_to 와 같은 규칙이다.
+    ⚠ 순이 하나뿐이면(그 순 안에서 끝난다) 그 순의 끝날이다.
+    """
+    것들 = _순들(칸)
+    return era_edge(*것들[-1], last=True) if 것들 else ""
 
 
 def 작형시기(경로=None):
@@ -98,13 +120,16 @@ def 작형시기(경로=None):
             행 = {"작물": 작물, "작형": 이름, "출처파일": 파일}
             for 칸, i in 자리.items():
                 행[칸] = _첫날(칸들[i])
+                행[f"{칸}끝"] = _끝날(칸들[i])
             행들.append(행)
     return 행들
 
 
 def main():
     행들 = 작형시기()
-    칸 = ["작물", "작형", "씨뿌림", "아주심기", "수확기", "성출하기", "출처파일"]
+    칸 = ["작물", "작형",
+         "씨뿌림", "씨뿌림끝", "아주심기", "아주심기끝",
+         "수확기", "수확기끝", "성출하기", "성출하기끝", "출처파일"]
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with io.open(OUT, "w", encoding="utf-8", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=칸, extrasaction="ignore")

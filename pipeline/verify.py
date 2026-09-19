@@ -34,10 +34,16 @@ sys.path.insert(0, str(HERE))
 칸 = {
     "crops": ["name", "base_temp", "upper_temp", "difficulty"],
     "crop_variants": ["crop_name", "maturity_type", "gdd_target", "days_to_harvest",
-                      "sow_method", "sow_from", "sow_to"],
+                      "sow_method", "sow_from", "sow_to",
+                      # 2026-09-18 — 씨앗/모종 창을 따로. 저쪽 crop_variant.py · 시더와 같이 늘렸다
+                      "seed_from", "seed_to", "plant_from", "plant_to"],
+    # 2026-09-19 — irrigate_needed · stage_tasks · stage_hazards 추가.
+    #   저쪽 crop_stage.py · 마이그레이션 · 시더와 같이 늘린다.
+    # ⚠ `water_need_mm` 은 **버린 칸이다. 늘 비어 있는 것이 정상**이라 `필수` 에 넣지 않는다.
+    #   까닭은 build.py 의 `계약` 주석(⚠⚠)에 있다. 칸은 저쪽 ORM 과 맞추려고 남긴다.
     "crop_stages": ["crop_name", "maturity_type", "stage_order", "stage_name",
                     "gdd_from", "gdd_to", "water_need_mm", "fertilize_needed",
-                    "guide_text"],
+                    "irrigate_needed", "stage_tasks", "stage_hazards", "guide_text"],
     # ⚠ 저쪽 `disaster_rules`(관측소·절기 기상통계)와 **다른 표**다. 섞지 말 것.
     #   2026-09-16 에 저쪽에 들어갔다 — app/models/farm/crop_disaster_rule.py
     "crop_disaster_rules": ["crop_name", "hazard", "rule_kind", "stage_name",
@@ -290,6 +296,10 @@ def 수확차례(자료):
     #   pipeline/cropping.py 에 같은 목록이 있지만 **일부러 한 번 더 적는다** —
     #   검사가 검사 대상을 import 하면 둘이 같이 틀릴 수 있다(이 파일 맨 위 원칙).
     수확아님 = ("수확보", "수확확보", "수확예정", "수확기예상")
+    # ★ 2026-09-19 — 다년생은 수확하고 나서 낙엽 → 휴면으로 한 해를 닫는다.
+    #   그건 "다음 작형이 붙은 자국" 이 아니므로 맨 뒤의 이 꼴은 세지 않는다.
+    #   (cropping.다년생꼬리 와 같은 목록. 위 원칙대로 일부러 따로 적는다)
+    다년생꼬리 = ("휴면", "낙엽", "월동", "뿌리활동", "수액이동")
     단계 = {}
     for r in 자료["crop_stages"]:
         단계.setdefault((r.get("crop_name"), r.get("maturity_type")), []).append(r)
@@ -303,7 +313,10 @@ def 수확차례(자료):
             if any(w in n for w in 수확낱말)
             and not any(w in re.sub(r"\s", "", n) for w in 수확아님)
         ]
-        if 자리 and 자리[-1] != len(이름들) - 1:
+        끝 = len(이름들)
+        while 자리 and 끝 > 자리[-1] + 1 and any(w in 이름들[끝 - 1] for w in 다년생꼬리):
+            끝 -= 1
+        if 자리 and 자리[-1] != 끝 - 1:
             뒤 = " → ".join(이름들[자리[-1]:])
             문제.append(f"{열쇠[0]}/{열쇠[1]}: 수확 뒤에 단계가 더 있다 — {뒤[:60]}")
     return 문제
