@@ -17,6 +17,20 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 HERE = Path(__file__).resolve().parent
+
+#: 값 안에 섞여 오는 태그·실체참조. 원본/농작업일정/farmwork.py 의 `tidy` 와 같은 규칙이다.
+#:
+#: ⚠ **두 곳에 같은 규칙이 있다.** 저쪽은 API 로 받아 저장할 때, 이쪽은 저장된 raw 를
+#:   다시 읽을 때다. 한쪽만 고치면 경로에 따라 값이 갈린다 — 실제로 그랬다.
+_실체 = (("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'))
+
+
+def _태그없이(글):
+    """`<br />` 같은 태그를 지우고 겹친 공백을 하나로."""
+    글 = re.sub(r"<[^>]+>", " ", 글 or "")
+    for a, b in _실체:
+        글 = 글.replace(a, b)
+    return " ".join(글.split())
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "feature"))
 
@@ -84,7 +98,12 @@ def schedule_from_raw(cmap):
                         if "-" in info and "생육과정" in info.split("-", 1)[0] else ""),
                 "정보구분": info,
                 "분류": g("kidofcomdtySeCodeNm"),
-                "작업명": g("opertNm"),
+                # ⚠ **태그를 지운다.** `opertNm` 에 `<br />` 이 그대로 들어온다 —
+                #   원본/농작업일정/farmwork.py 의 `tidy` 가 같은 까닭으로 있는데,
+                #   이쪽(raw 를 다시 읽는 길)에는 없어 93건이 새고 있었다(2026-09-20).
+                #   이 값은 crop_stages.stage_name 이 되어 **화면에 그대로 나가고**
+                #   할 일 카드 제목도 이 글자로 만들어진다.
+                "작업명": _태그없이(g("opertNm")),
                 "시작월": bm, "시작순": g("beginEra"),
                 "종료월": em, "종료순": g("endEra"),
                 "종료이듬해": "Y" if e_next else "",
